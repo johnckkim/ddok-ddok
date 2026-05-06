@@ -736,10 +736,15 @@ async function searchLegalDB(intent) {
     );
   }
   // 해석·유권해석·법령해석 → 법령해석례 (expc) 추가
-  const EXPC_RE = /해석|유권해석|법령해석|행정해석|국세청|국토교통부|고용노동부|법무부.*해석/;
-  if (EXPC_RE.test(query)) {
-    tasks.push(lawSearch("expc", query, 5));
-  }
+  const EXPC_RE = /해석|유권해석|법령해석|행정해석/;
+  if (EXPC_RE.test(query)) tasks.push(lawSearch("expc", query, 5));
+  // 부처별 해석례 자동 라우팅 (Referer 헤더로 모든 target 작동)
+  const NTS_RE  = /국세청|세무|세금|소득세|부가가치세|양도소득|법인세|상속세|증여세/;
+  const MOLIT_RE = /국토교통부|국토부|부동산|건축|주택|건설|토지/;
+  const MOEL_RE = /고용노동부|고용부|근로기준|연차|연장근로|임금|최저임금|해고|산업재해|노사관계/;
+  if (NTS_RE.test(query))  tasks.push(lawSearch("ntsCgmExpc", query, 5));
+  if (MOLIT_RE.test(query)) tasks.push(lawSearch("molitCgmExpc", query, 5));
+  if (MOEL_RE.test(query)) tasks.push(lawSearch("moelCgmExpc", query, 5));
   const all = await Promise.all(tasks);
   const result = { laws: all[0], cases: all[1], query };
   // 추가 결과 매핑 (순서 의존 X — type 필드로)
@@ -749,7 +754,13 @@ async function searchLegalDB(intent) {
     else if (r?.type === "cdc") result.cdc = r;
     else if (r?.type === "assembly") result.assembly = r;
     else if (r?.type === "crime") result.crime = r;
-    else if (r?.raw?.ExpcSearch) result.expc = r;
+    else if (r?.raw?.Expc) result.expc = r;
+    else if (r?.raw?.CgmExpc) {
+      const t = r.raw.CgmExpc?.target;
+      if (t === "ntsCgmExpc") result.nts_expc = r;
+      else if (t === "molitCgmExpc") result.molit_expc = r;
+      else if (t === "moelCgmExpc") result.moel_expc = r;
+    }
   }
   return result;
 }
