@@ -75,6 +75,10 @@
 - 🐛 `f40daf3` 타이프라이터 — 돌아왔을 때 현재 target까지 즉시 점프 (재생 X)
 - ✨ **`33aaad3` 결합형 신뢰도 (Option C)**: Claude self + 검증 동의 + 교차 동의 + 인용 매칭률 4가지 결합 GRADE 자동 산정
 
+### 9. 후속 fix
+- 📝 `c67874a` CHANGELOG.md 추가 (Drive + dev 양쪽)
+- 🐛 `6551155` 새 대화 시 깊이 분석 토글 OFF 자동 리셋
+
 ---
 
 ## 환경변수 (Vercel — production + development)
