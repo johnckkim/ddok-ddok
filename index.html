@@ -637,7 +637,20 @@ async function searchLegalDB(intent) {
     lawSearch("law", query, 5),
     lawSearch("prec", query, 5)
   ];
-  // 의안·국회·입법 관련 키워드 시 열린국회 동시 호출
+  // === 자동 라우팅 ===
+  // 헌법·위헌·기본권 키워드 → 헌재 결정례 + 헌재 판례정보 동시 호출
+  const CDC_RE = /헌법|위헌|기본권|헌재|평등권|자유권|위헌소송|헌법소원/;
+  if (CDC_RE.test(query)) {
+    tasks.push(lawSearch("detc", query, 5));   // law.go.kr 헌재 결정문
+    tasks.push(
+      fetch("/api/cdc", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ keyword: query, numOfRows: 5 })
+      }).then(r => r.json()).then(d => ({ ok: true, raw: d, type: "cdc" }))
+       .catch(e => ({ error: e.message, type: "cdc" }))
+    );
+  }
+  // 의안·법안·국회 → 열린국회
   const ASSEMBLY_RE = /의안|법안|국회|발의|입법|개정안|제정안|상임위|본회의/;
   if (ASSEMBLY_RE.test(query)) {
     tasks.push(
@@ -648,9 +661,33 @@ async function searchLegalDB(intent) {
        .catch(e => ({ error: e.message, type: "assembly" }))
     );
   }
-  const [laws, cases, ...rest] = await Promise.all(tasks);
-  const result = { laws, cases, query };
-  if (rest[0]) result.assembly = rest[0];
+  // 범죄·통계·검거·발생 → 범죄통계
+  const CRIME_RE = /범죄통계|발생건수|검거율|범죄율|살인|강도|절도|폭력|성폭력|마약/;
+  if (CRIME_RE.test(query)) {
+    tasks.push(
+      fetch("/api/crime", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ numOfRows: 10 })
+      }).then(r => r.json()).then(d => ({ ok: true, raw: d, type: "crime" }))
+       .catch(e => ({ error: e.message, type: "crime" }))
+    );
+  }
+  // 해석·유권해석·법령해석 → 법령해석례 (expc) 추가
+  const EXPC_RE = /해석|유권해석|법령해석|행정해석|국세청|국토교통부|고용노동부|법무부.*해석/;
+  if (EXPC_RE.test(query)) {
+    tasks.push(lawSearch("expc", query, 5));
+  }
+  const all = await Promise.all(tasks);
+  const result = { laws: all[0], cases: all[1], query };
+  // 추가 결과 매핑 (순서 의존 X — type 필드로)
+  for (const r of all.slice(2)) {
+    if (!r) continue;
+    if (r?.raw?.DetcSearch) result.detc = r;
+    else if (r?.type === "cdc") result.cdc = r;
+    else if (r?.type === "assembly") result.assembly = r;
+    else if (r?.type === "crime") result.crime = r;
+    else if (r?.raw?.ExpcSearch) result.expc = r;
+  }
   return result;
 }
 
@@ -1031,12 +1068,4 @@ if ($dtCb && $dtToggle) {
 renderHistory();
 renderMessages();
 
-// DOMContentLoaded 보강 — 환영 메시지 즉시 표시
-if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", () => { renderMessages(); renderHistory(); });
-} else {
-  setTimeout(() => { renderMessages(); }, 0);
-}
-</script>
-</body>
-</html>
+// DOMContentLoaded 보강 — 환영 메
