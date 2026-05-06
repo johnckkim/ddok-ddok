@@ -850,7 +850,7 @@ function renderMessages() {
       const reasoningBlock = c.deepthink_reasoning ?
         `<details class="reasoning-panel"><summary>💭 깊이 분석 사고 과정 보기</summary><div class="reasoning-body">${escapeHtml(c.deepthink_reasoning)}</div></details>` : "";
       const streamingClass = isStreaming ? " streaming-cursor" : "";
-      const streamingId = isStreaming ? ' id="_streaming_body"' : "";
+      const streamingId = isStreaming ? ` id="${msg.streamBodyId || '_streaming_body'}"` : "";
       const bodyHtml = isStreaming
         ? `<div class="${streamingClass}"${streamingId}>${md2html(c.answer_md)}</div>`
         : md2html(c.answer_md);
@@ -949,6 +949,7 @@ async function ask(question) {
     streamCard = {
       role: "assistant",
       streaming: true,
+      streamBodyId: _streamBodyId,
       card: {
         answer_md: "",
         intent: intent,
@@ -962,54 +963,47 @@ async function ask(question) {
     conv.messages.push(streamCard);
     renderMessages();
   };
-  // === 진짜 타이프라이터 (window scope — 새 대화 클릭 시 취소 가능) ===
-  if (window._typeRaf) { try { cancelAnimationFrame(window._typeRaf); } catch {} }
-  window._typeShown = ""; window._typeTarget = ""; window._typeRaf = null; window._typeNode = null;
-  // 이 ask() 호출 식별자 — 새 대화 시작 시 _askId 가 바뀌어 옛 콜백 무시
+  // === 타이프라이터 (per-ask closure — 두 세션 동시 진행 시 격리) ===
+  const _streamBodyId = "_streaming_body_" + Date.now() + "_" + Math.random().toString(36).slice(2, 8);
+  const ts = { target: "", shown: "", node: null, raf: null };
+  // 새 대화 시 옛 콜백 무시할 askId
   const _askId = (window._askId = (window._askId || 0) + 1);
   const _typewriterTick = () => {
-    if (_askId !== window._askId) { window._typeRaf = null; return; }
-    if (window._typeShown.length >= window._typeTarget.length) {
-      window._typeRaf = null;
-      return;
-    }
-    const $body = document.getElementById("_streaming_body");
+    if (_askId !== window._askId) { ts.raf = null; return; }
+    if (ts.shown.length >= ts.target.length) { ts.raf = null; return; }
+    const $body = document.getElementById(_streamBodyId);
     if (!$body) {
-      window._typeRaf = requestAnimationFrame(_typewriterTick);
+      // body 미존재 (사용자가 다른 대화 보고 있음) — 다음 frame 재시도
+      ts.raf = requestAnimationFrame(_typewriterTick);
       return;
     }
-    // Text node 한 번만 만들고 appendData로 글자 추가 → 기존 텍스트 reflow 없음
-    // 단, DOM이 재빌드되면 새 text node 만들 때 이미 보인 분량(_typeShown)으로 미리 채움
-    if (!window._typeNode || window._typeNode.parentNode !== $body) {
+    // DOM 재빌드되면 새 text node를 이미 보인 분량으로 채워서 시작
+    if (!ts.node || ts.node.parentNode !== $body) {
       $body.textContent = "";
-      window._typeNode = document.createTextNode(window._typeShown || "");
-      $body.appendChild(window._typeNode);
+      ts.node = document.createTextNode(ts.shown || "");
+      $body.appendChild(ts.node);
       $body.style.whiteSpace = "pre-wrap";
       $body.style.lineHeight = "1.7";
     }
-    const lag = window._typeTarget.length - window._typeShown.length;
-    let step = 1;  // 부드러움 우선 — chunks 작게
+    const lag = ts.target.length - ts.shown.length;
+    let step = 1;
     if (lag > 400) step = 5;
     else if (lag > 150) step = 3;
     else if (lag > 60) step = 2;
-    const newChars = window._typeTarget.slice(window._typeShown.length, window._typeShown.length + step);
-    window._typeNode.appendData(newChars);
-    window._typeShown += newChars;
+    const newChars = ts.target.slice(ts.shown.length, ts.shown.length + step);
+    ts.node.appendData(newChars);
+    ts.shown += newChars;
     const $msgs = document.getElementById("messages");
     if ($msgs) $msgs.scrollTop = $msgs.scrollHeight;
-    window._typeRaf = requestAnimationFrame(_typewriterTick);
+    ts.raf = requestAnimationFrame(_typewriterTick);
   };
-  const _onMainStartReset = () => {
-    window._typeShown = ""; window._typeTarget = "";
-    if (window._typeRaf) { try { cancelAnimationFrame(window._typeRaf); } catch {} window._typeRaf = null; }
-  };
+  const _onMainStartReset = () => {};  // closure-scoped — no-op now
   const onMainDelta = (delta, full) => {
-    // 새 대화로 전환되어 askId 가 바뀌었으면 옛 stream 무시
     if (_askId !== window._askId) return;
     if (!streamCard) return;
     streamCard.card.answer_md = full;
-    window._typeTarget = full;
-    if (!window._typeRaf) window._typeRaf = requestAnimationFrame(_typewriterTick);
+    ts.target = full;
+    if (!ts.raf) ts.raf = requestAnimationFrame(_typewriterTick);
   };
 
   try {
