@@ -919,10 +919,14 @@ function renderHistory() {
 
 // ============ Ask ============
 async function ask(question) {
-  if (state.busy) return;
+  // 같은 대화에서만 중복 ask 방지 — 다른 대화는 병렬 허용
+  const conv = curConv();
+  if (!conv) return;
+  if (!window._busyConvs) window._busyConvs = new Set();
+  if (window._busyConvs.has(conv.id)) return;
+  window._busyConvs.add(conv.id);
   state.busy = true;
   document.getElementById("btn-send").disabled = true;
-  const conv = curConv();
   conv.messages.push({ role: "user", content: question });
   if (conv.title === "새 대화") conv.title = question.slice(0,24);
   // 진행 메시지 + 스트리밍 카드 placeholder
@@ -966,10 +970,7 @@ async function ask(question) {
   // === 타이프라이터 (per-ask closure — 두 세션 동시 진행 시 격리) ===
   const _streamBodyId = "_streaming_body_" + Date.now() + "_" + Math.random().toString(36).slice(2, 8);
   const ts = { target: "", shown: "", node: null, raf: null };
-  // 새 대화 시 옛 콜백 무시할 askId
-  const _askId = (window._askId = (window._askId || 0) + 1);
   const _typewriterTick = () => {
-    if (_askId !== window._askId) { ts.raf = null; return; }
     if (ts.shown.length >= ts.target.length) { ts.raf = null; return; }
     const $body = document.getElementById(_streamBodyId);
     if (!$body) {
@@ -999,7 +1000,6 @@ async function ask(question) {
   };
   const _onMainStartReset = () => {};  // closure-scoped — no-op now
   const onMainDelta = (delta, full) => {
-    if (_askId !== window._askId) return;
     if (!streamCard) return;
     streamCard.card.answer_md = full;
     ts.target = full;
@@ -1032,8 +1032,14 @@ async function ask(question) {
     conv.messages.push({ role: "error", content: "처리 실패: " + e.message + "\n\n[해결] CORS 에러 시 우측 상단 ⚙ → 'CORS 프록시' 활성화." });
   }
   setConvs(state.conversations);
-  state.busy = false;
-  document.getElementById("btn-send").disabled = false;
+  // 이 대화의 busy 만 해제 (다른 대화는 계속 진행 중일 수 있음)
+  if (window._busyConvs) window._busyConvs.delete(conv.id);
+  // 현재 보고 있는 대화가 더 이상 busy 아니면 send 버튼 활성화
+  if (curConv()?.id === conv.id || !window._busyConvs?.has(curConv()?.id)) {
+    state.busy = false;
+    const $s = document.getElementById("btn-send");
+    if ($s) $s.disabled = false;
+  }
   renderMessages();
 }
 
@@ -1067,15 +1073,10 @@ window.copyMessage = function(btn) {
 };
 
 window.newChat = function() {
-  // 진행 중인 답변이 있어도 새 대화로 즉시 전환할 수 있도록 busy 리셋
+  // 진행 중인 답변은 자체 closure에서 계속 흘러감 (간섭 X) — 새 대화 입력만 허용되면 됨
   state.busy = false;
   const $send = document.getElementById("btn-send");
   if ($send) $send.disabled = false;
-  // 진행 중인 타이프라이터 rAF가 있으면 취소 (window scope에 있을 때)
-  if (window._typeRaf) { try { cancelAnimationFrame(window._typeRaf); } catch {} window._typeRaf = null; }
-  window._typeShown = ""; window._typeTarget = ""; window._typeNode = null;
-  // 새 ask 호출이 옛 콜백 무시하도록 askId 증가
-  window._askId = (window._askId || 0) + 1;
   // 빈 "새 대화" 중복 방지: 현재 대화가 비어있으면 재사용
   const current = curConv();
   if (current && current.messages.length === 0) {
