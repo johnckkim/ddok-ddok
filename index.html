@@ -96,10 +96,11 @@ body {
 .chat-area { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
 .messages { flex: 1; overflow-y: auto; padding: 24px max(20px, 12%); scroll-behavior: smooth; }
 .message { margin-bottom: 28px; }
+.message.user { display: flex; justify-content: flex-end; }
 .message.user .bubble {
   background: var(--user-bubble); color: var(--user-text);
-  padding: 12px 16px; border-radius: 12px 12px 2px 12px; max-width: 80%;
-  margin-left: auto; font-size: 14px; line-height: 1.5; word-break: break-word;
+  padding: 10px 14px; border-radius: 14px 14px 4px 14px; max-width: 70%;
+  font-size: 14px; line-height: 1.5; word-break: break-word; white-space: pre-wrap;
 }
 .answer-card {
   background: var(--card-bg); border: 1px solid var(--border);
@@ -364,9 +365,9 @@ body {
     <div class="messages" id="messages"></div>
     <div class="input-area">
       <div class="input-row" style="align-items:flex-end;">
-        <label class="deepthink-toggle" id="deepthink-toggle" title="DeepSeek-reasoner로 깊이 분석 (느리지만 정밀)">
+        <label class="deepthink-toggle" id="deepthink-toggle" onclick="var l=this;setTimeout(function(){l.classList.toggle('on',document.getElementById('deepthink-cb').checked)},0)">
           <input type="checkbox" id="deepthink-cb">
-          <span>🧠 깊이 분석</span>
+          <span>깊이 분석</span>
         </label>
         <textarea id="input" placeholder="법률 질문을 입력하세요. 예) 근로기준법상 연차휴가는 어떻게 발생하나요?" rows="1" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();document.getElementById('btn-send').click();}" oninput="this.style.height='44px';this.style.height=Math.min(this.scrollHeight,120)+'px';"></textarea>
         <button id="btn-send" class="send-btn" title="전송 (Enter)" onclick="var i=document.getElementById('input'),q=i.value.trim();if(!q)return;i.value='';i.style.height='44px';if(typeof ask==='function')ask(q);">➤</button>
