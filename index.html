@@ -902,28 +902,23 @@ async function ask(question) {
     conv.messages.push(streamCard);
     renderMessages();
   };
-  // === 부드러운 타이핑 효과: 80ms 단위 throttle (~12fps), 마지막 값만 렌더 ===
-  let _streamPending = false;
-  let _streamLatest = "";
-  const flushStream = () => {
-    _streamPending = false;
-    const $body = document.getElementById("_streaming_body");
-    if ($body) {
-      $body.innerHTML = md2html(_streamLatest);
-      const $msgs = document.getElementById("messages");
-      if ($msgs) $msgs.scrollTop = $msgs.scrollHeight;
-    } else {
-      // 스트리밍 카드 DOM 미존재 → 전체 렌더 후 다음 frame부터 in-place
-      renderMessages();
-    }
-  };
+  // === 진짜 부드러운 타이핑: 스트리밍 중에는 plain text만 갱신 (markdown 재파싱 X) ===
+  // → 답변 완료 후 try{} 블록에서 renderMessages()가 최종 markdown 렌더링
   const onMainDelta = (delta, full) => {
     if (!streamCard) return;
     streamCard.card.answer_md = full;
-    _streamLatest = full;
-    if (_streamPending) return; // 이미 다음 flush 예약됨
-    _streamPending = true;
-    setTimeout(flushStream, 80);
+    const $body = document.getElementById("_streaming_body");
+    if ($body) {
+      // textContent + pre-wrap = 매 delta마다 부담 없이 타이핑 효과
+      $body.textContent = full;
+      $body.style.whiteSpace = "pre-wrap";
+      $body.style.fontFamily = "inherit";
+      $body.style.lineHeight = "1.7";
+      const $msgs = document.getElementById("messages");
+      if ($msgs) $msgs.scrollTop = $msgs.scrollHeight;
+    } else if (full.length % 80 < 5) {
+      renderMessages();
+    }
   };
 
   try {
