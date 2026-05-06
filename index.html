@@ -310,7 +310,7 @@ body {
 }
 
 /* === 애니메이션 === */
-.message { animation: fadeIn 0.3s ease-out; }
+.message { /* fadeIn 제거 — DOM 재빌드 시 완료된 카드 깜빡임 방지 */ }
 .message.streaming { animation: none; }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 .streaming-cursor::after {
