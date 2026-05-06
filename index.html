@@ -1154,6 +1154,11 @@ window.newChat = function() {
   state.busy = false;
   const $send = document.getElementById("btn-send");
   if ($send) $send.disabled = false;
+  // 깊이 분석 토글 OFF 초기화
+  const $dtCb = document.getElementById("deepthink-cb");
+  const $dtToggle = document.getElementById("deepthink-toggle");
+  if ($dtCb) $dtCb.checked = false;
+  if ($dtToggle) $dtToggle.classList.remove("on");
   // 빈 "새 대화" 중복 방지: 현재 대화가 비어있으면 재사용
   const current = curConv();
   if (current && current.messages.length === 0) {
