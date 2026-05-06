@@ -989,9 +989,11 @@ async function ask(question) {
       ts.raf = requestAnimationFrame(_typewriterTick);
       return;
     }
-    // DOM 재빌드되면 새 text node를 이미 보인 분량으로 채워서 시작
+    // DOM 재빌드되면 (예: 사용자가 다른 대화 갔다 돌아옴) 현재 target까지 즉시 점프
+    // 떠나있는 동안 누적된 chunks 다 보여주고, 그 후 새 chunks만 typewriter로 추가
     if (!ts.node || ts.node.parentNode !== $body) {
       $body.textContent = "";
+      ts.shown = ts.target;  // ← 핵심: 누적분 즉시 동기화
       ts.node = document.createTextNode(ts.shown || "");
       $body.appendChild(ts.node);
       $body.style.whiteSpace = "pre-wrap";
