@@ -334,16 +334,24 @@ body {
 
 /* === 딥씽크 토글 === */
 .deepthink-toggle {
-  display: inline-flex; align-items: center; gap: 6px;
-  height: 44px; padding: 0 14px; margin-right: 0;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  height: 44px; padding: 0 16px; margin-right: 0;
   cursor: pointer; border-radius: 10px;
-  background: var(--primary); border: 1px solid var(--primary);
-  color: white; font-size: 13px; font-weight: 500;
-  user-select: none; transition: all 0.15s; white-space: nowrap;
-  opacity: 0.55;
+  background: transparent; border: 1.5px solid var(--border);
+  color: var(--text-mute); font-size: 13px; font-weight: 500;
+  user-select: none; transition: all 0.15s ease; white-space: nowrap;
 }
-.deepthink-toggle:hover { opacity: 0.8; }
-.deepthink-toggle.on { opacity: 1; box-shadow: 0 0 0 2px rgba(30,58,138,0.25); }
+.deepthink-toggle:hover {
+  background: var(--bg);
+  border-color: var(--text-mute);
+  color: var(--text);
+}
+.deepthink-toggle.on {
+  background: var(--chip-bg);
+  color: var(--chip-text);
+  border-color: var(--chip-text);
+}
+.deepthink-toggle.on:hover { background: #BFDBFE; }
 .deepthink-toggle input { position: absolute; opacity: 0; pointer-events: none; width: 0; height: 0; margin: 0; padding: 0; }
 .input-row { gap: 8px; align-items: flex-end; }
 
