@@ -248,7 +248,8 @@ body {
 .input-actions .send-btn:active:not(:disabled) { transform: translateY(0); }
 .input-actions .send-btn:disabled { background: var(--text-mute); cursor: not-allowed; transform: none; }
 /* deepthink toggle을 input-actions 내부 크기에 맞춤 */
-.input-actions .deepthink-toggle { height: 34px; padding: 0 12px; font-size: 12.5px; border-radius: 17px; }
+.input-actions .deepthink-toggle { height: 34px; padding: 0 14px; font-size: 12.5px; border-radius: 17px; gap: 0; }
+.input-actions .deepthink-toggle span { display: inline-block; text-align: center; line-height: 1; }
 .input-hint {
   font-size: 11px; color: var(--text-mute); margin-top: 6px; text-align: right;
 }
@@ -343,7 +344,7 @@ body {
 }
 .deepthink-toggle:hover { opacity: 0.8; }
 .deepthink-toggle.on { opacity: 1; box-shadow: 0 0 0 2px rgba(30,58,138,0.25); }
-.deepthink-toggle input { display: none; }
+.deepthink-toggle input { position: absolute; opacity: 0; pointer-events: none; width: 0; height: 0; margin: 0; padding: 0; }
 .input-row { gap: 8px; align-items: flex-end; }
 
 /* === 사고 과정 패널 === */
