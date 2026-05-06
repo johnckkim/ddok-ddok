@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5">
 <meta name="theme-color" content="#1E3A8A">
 <title>똑똑</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%231E3A8A'/%3E%3Ctext x='50' y='66' text-anchor='middle' font-size='44' font-weight='700' fill='white' font-family='-apple-system,BlinkMacSystemFont,sans-serif'%3E%EB%98%91%3C/text%3E%3C/svg%3E">
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'%3E%3Crect width='180' height='180' rx='40' fill='%231E3A8A'/%3E%3Ctext x='90' y='118' text-anchor='middle' font-size='80' font-weight='700' fill='white' font-family='-apple-system,BlinkMacSystemFont,sans-serif'%3E%EB%98%91%3C/text%3E%3C/svg%3E">
 <style>
 :root {
   --bg: #F8FAFC;
@@ -884,7 +886,9 @@ function renderMessages() {
 
 function renderHistory() {
   const $h = document.getElementById("history-list");
-  $h.innerHTML = state.conversations.map(c => `
+  $h.innerHTML = state.conversations
+    .filter(c => c.messages && c.messages.length > 0)
+    .map(c => `
     <div class="history-item ${c.id === state.currentId ? 'active' : ''}" data-id="${c.id}">
       <span>${escapeHtml(c.title)}</span>
       <button class="delete" data-del="${c.id}" title="삭제">×</button>
@@ -960,7 +964,7 @@ async function ask(question) {
   };
   // === 진짜 타이프라이터 (window scope — 새 대화 클릭 시 취소 가능) ===
   if (window._typeRaf) { try { cancelAnimationFrame(window._typeRaf); } catch {} }
-  window._typeShown = ""; window._typeTarget = ""; window._typeRaf = null;
+  window._typeShown = ""; window._typeTarget = ""; window._typeRaf = null; window._typeNode = null;
   // 이 ask() 호출 식별자 — 새 대화 시작 시 _askId 가 바뀌어 옛 콜백 무시
   const _askId = (window._askId = (window._askId || 0) + 1);
   const _typewriterTick = () => {
@@ -969,22 +973,29 @@ async function ask(question) {
       window._typeRaf = null;
       return;
     }
-    const lag = window._typeTarget.length - window._typeShown.length;
-    let step = 1;
-    if (lag > 300) step = 10;
-    else if (lag > 120) step = 4;
-    else if (lag > 40) step = 2;
-    window._typeShown = window._typeTarget.slice(0, window._typeShown.length + step);
     const $body = document.getElementById("_streaming_body");
-    if ($body) {
-      $body.textContent = window._typeShown;
-      if (!$body.style.whiteSpace) {
-        $body.style.whiteSpace = "pre-wrap";
-        $body.style.lineHeight = "1.7";
-      }
-      const $msgs = document.getElementById("messages");
-      if ($msgs) $msgs.scrollTop = $msgs.scrollHeight;
+    if (!$body) {
+      window._typeRaf = requestAnimationFrame(_typewriterTick);
+      return;
     }
+    // Text node 한 번만 만들고 appendData로 글자 추가 → 기존 텍스트 reflow 없음
+    if (!window._typeNode || window._typeNode.parentNode !== $body) {
+      $body.textContent = "";
+      window._typeNode = document.createTextNode("");
+      $body.appendChild(window._typeNode);
+      $body.style.whiteSpace = "pre-wrap";
+      $body.style.lineHeight = "1.7";
+    }
+    const lag = window._typeTarget.length - window._typeShown.length;
+    let step = 1;  // 부드러움 우선 — chunks 작게
+    if (lag > 400) step = 5;
+    else if (lag > 150) step = 3;
+    else if (lag > 60) step = 2;
+    const newChars = window._typeTarget.slice(window._typeShown.length, window._typeShown.length + step);
+    window._typeNode.appendData(newChars);
+    window._typeShown += newChars;
+    const $msgs = document.getElementById("messages");
+    if ($msgs) $msgs.scrollTop = $msgs.scrollHeight;
     window._typeRaf = requestAnimationFrame(_typewriterTick);
   };
   const _onMainStartReset = () => {
@@ -1032,24 +1043,7 @@ async function ask(question) {
 }
 
 // ============ Events ============
-document.getElementById("btn-send").addEventListener("click", () => {
-  const $i = document.getElementById("input");
-  const q = $i.value.trim();
-  if (!q) return;
-  $i.value = "";
-  $i.style.height = "44px";
-  ask(q);
-});
-document.getElementById("input").addEventListener("keydown", e => {
-  if (e.key === "Enter" && !e.shiftKey) {
-    e.preventDefault();
-    document.getElementById("btn-send").click();
-  }
-});
-document.getElementById("input").addEventListener("input", e => {
-  e.target.style.height = "44px";
-  e.target.style.height = Math.min(e.target.scrollHeight, 120) + "px";
-});
+// (btn-send / input 의 click·keydown·input 핸들러는 HTML inline onclick/onkeydown/oninput 로 처리됨 — 중복 등록 방지)
 window.copyMessage = function(btn) {
   const wrap = btn.closest('.message');
   if (!wrap) return;
@@ -1084,7 +1078,9 @@ window.newChat = function() {
   if ($send) $send.disabled = false;
   // 진행 중인 타이프라이터 rAF가 있으면 취소 (window scope에 있을 때)
   if (window._typeRaf) { try { cancelAnimationFrame(window._typeRaf); } catch {} window._typeRaf = null; }
-  window._typeShown = ""; window._typeTarget = "";
+  window._typeShown = ""; window._typeTarget = ""; window._typeNode = null;
+  // 새 ask 호출이 옛 콜백 무시하도록 askId 증가
+  window._askId = (window._askId || 0) + 1;
   // 빈 "새 대화" 중복 방지: 현재 대화에 메시지 없으면 재사용
   const current = curConv();
   if (current && current.messages.length === 0) {
