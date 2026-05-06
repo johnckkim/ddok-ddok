@@ -1078,4 +1078,12 @@ _syncDt();
 renderHistory();
 renderMessages();
 
-// DOMContentLoaded 보강 — 환영 메
+// DOMContentLoaded 보강 — 환영 메시지 즉시 표시
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", () => { renderMessages(); renderHistory(); });
+} else {
+  setTimeout(() => { renderMessages(); }, 0);
+}
+</script>
+</body>
+</html>
