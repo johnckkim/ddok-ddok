@@ -308,7 +308,7 @@ body {
 
 /* === 딥씽크 토글 === */
 .deepthink-toggle {
-  display: inline-flex; align-items: center; gap: 6px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
   height: 44px; padding: 0 14px; margin-right: 0;
   cursor: pointer; border-radius: 10px;
   background: var(--primary); border: 1px solid var(--primary);
@@ -370,7 +370,7 @@ body {
       <div class="input-row" style="align-items:flex-end;">
         <label class="deepthink-toggle" id="deepthink-toggle" title="DeepSeek-reasoner로 깊이 분석 (느리지만 정밀)">
           <input type="checkbox" id="deepthink-cb">
-          <span>🧠 깊이 분석</span>
+          <span>깊이 분석</span>
         </label>
         <textarea id="input" placeholder="법률 질문을 입력하세요. 예) 근로기준법상 연차휴가는 어떻게 발생하나요?" rows="1"></textarea>
         <button id="btn-send" class="send-btn" title="전송 (Enter)">➤</button>
@@ -668,11 +668,25 @@ async function classifyQuestion(q) {
 async function searchLegalDB(intent) {
   const query = (intent.keywords || []).join(" ").trim() || intent.original || "";
   if (!query) return { laws: [], cases: [], note: "no keywords" };
-  const [laws, cases] = await Promise.all([
+  const tasks = [
     lawSearch("law", query, 5),
     lawSearch("prec", query, 5)
-  ]);
-  return { laws, cases, query };
+  ];
+  // 의안·국회·입법 관련 키워드 시 열린국회 동시 호출
+  const ASSEMBLY_RE = /의안|법안|국회|발의|입법|개정안|제정안|상임위|본회의/;
+  if (ASSEMBLY_RE.test(query)) {
+    tasks.push(
+      fetch("/api/assembly", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ keyword: query, age: 22, pSize: 5 })
+      }).then(r => r.json()).then(d => ({ ok: true, raw: d, type: "assembly" }))
+       .catch(e => ({ error: e.message, type: "assembly" }))
+    );
+  }
+  const [laws, cases, ...rest] = await Promise.all(tasks);
+  const result = { laws, cases, query };
+  if (rest[0]) result.assembly = rest[0];
+  return result;
 }
 
 function extractGrade(text) {
@@ -995,54 +1009,4 @@ window.updateRelatedLaws = function(bundle) {
   // law.go.kr LawSearch
   const tryLaws = lawsRaw?.LawSearch?.law || lawsRaw?.law || [];
   const lawArr = Array.isArray(tryLaws) ? tryLaws : (tryLaws ? [tryLaws] : []);
-  lawArr.slice(0,5).forEach(l => {
-    const title = l.법령명한글 || l.법령명 || l.title;
-    if (!title) return;
-    const link = l.법령상세링크 ? "https://www.law.go.kr"+l.법령상세링크 :
-      "https://www.law.go.kr/lsSc.do?query="+encodeURIComponent(title);
-    items.push({ raw: title.slice(0,28), url: link });
-  });
-  // 판례
-  const tryPrecs = casesRaw?.PrecSearch?.prec || casesRaw?.prec || [];
-  const precArr = Array.isArray(tryPrecs) ? tryPrecs : (tryPrecs ? [tryPrecs] : []);
-  precArr.slice(0,5).forEach(p => {
-    const title = p.사건명 || p.사건번호 || p.title;
-    if (!title) return;
-    const link = p.판례상세링크 ? "https://www.law.go.kr"+p.판례상세링크 :
-      "https://www.law.go.kr/precSc.do?query="+encodeURIComponent(p.사건번호||title);
-    items.push({ raw: title.slice(0,28), url: link });
-  });
-  if (items.length) {
-    $rl.innerHTML = items.map(c =>
-      `<div class="law-chip" onclick="window.open('${c.url}','_blank')" style="cursor:pointer">${escapeHtml(c.raw)}</div>`
-    ).join("");
-    $panel.style.display = "block";
-  } else {
-    $panel.style.display = "none";
-  }
-};
-
-
-// 딥씽크 토글 시각 효과
-const $dtCb = document.getElementById("deepthink-cb");
-const $dtToggle = document.getElementById("deepthink-toggle");
-if ($dtCb && $dtToggle) {
-  $dtCb.addEventListener("change", () => {
-    $dtToggle.classList.toggle("on", $dtCb.checked);
-  });
-}
-
-
-
-renderHistory();
-renderMessages();
-
-// DOMContentLoaded 보강 — 환영 메시지 즉시 표시
-if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", () => { renderMessages(); renderHistory(); });
-} else {
-  setTimeout(() => { renderMessages(); }, 0);
-}
-</script>
-</body>
-</html>
+  lawArr.sli
