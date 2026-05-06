@@ -654,29 +654,86 @@ async function runPipeline(question, progress, onMainStart, onMainDelta, deepThi
 }
 
 // === 백그라운드 검증 (답변 표시 후) ===
+// === 신뢰도 계산 헬퍼 (Option C: Claude self + 검증/교차 동의 + 인용 매칭) ===
+function detectAgreement(text) {
+  if (!text || text.length < 5) return 0;
+  const disagree = /오류|잘못|틀림|틀렸|부정확|반대|수정\s*필요|재검토|문제가\s*있|보완\s*필요|결함|미흡/.test(text);
+  const agree = /동의|타당|적절|정확|일치|옳|올바|맞다|맞습니다|적합|문제\s*없|이상\s*없|결함\s*없|타당성/.test(text);
+  if (disagree && !agree) return -1;
+  if (agree && !disagree) return 1;
+  return 0;
+}
+async function validateCitations(citations) {
+  if (!citations || citations.length === 0) return { rate: 1, total: 0, confirmed: 0 };
+  const cases = citations.filter(c => c.type === 'prec');
+  if (cases.length === 0) return { rate: 1, total: 0, confirmed: 0 };
+  const checks = cases.slice(0, 8).map(c =>
+    fetch('/api/lawsearch', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ target: 'prec', query: c.raw, display: 3 })
+    }).then(r => r.json()).then(d => {
+      const items = d?.LawSearch?.prec || d?.PrecSearch?.prec || d?.prec || [];
+      const list = Array.isArray(items) ? items : [items];
+      const norm = c.raw.replace(/\s/g, '');
+      return list.some(p => (p?.사건번호 || '').replace(/\s/g, '') === norm);
+    }).catch(() => false)
+  );
+  const results = await Promise.all(checks);
+  const confirmed = results.filter(Boolean).length;
+  return { rate: confirmed / cases.length, total: cases.length, confirmed };
+}
+function computeFinalGrade(claudeGrade, verifyAgree, crossAgree, citations) {
+  let score = ({ A: 3, B: 2, C: 1 })[claudeGrade] || 2;
+  score += verifyAgree * 0.3;
+  score += crossAgree * 0.3;
+  if (citations.total >= 1) {
+    if (citations.rate >= 0.8) score += 0.5;
+    else if (citations.rate < 0.5) score -= 0.5;
+  }
+  return score >= 3.0 ? "A" : score >= 2.0 ? "B" : "C";
+}
+
 async function runVerification(card, question, deepThink) {
+  const postJson = (url, body) => fetch(url, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body)
+  }).then(r => r.ok ? r.json() : Promise.reject(new Error(url + " " + r.status)));
+
   const tasks = [
-    deepseekCall(
-      [{role:"user", content: `다음 답변의 논리 결함·인용 오류 점검 (300토큰):\n${card.answer_md.slice(0,2500)}`}],
-      "한국 법률 검증자. 간결."
-    ).catch(e => ({content: "(검증 실패: "+e.message+")", error: true})),
-    grokCall(
-      [{role:"user", content: `검증 (200토큰):\n${card.answer_md.slice(0,1200)}`}],
-      "한국 법률 교차검증자. 200토큰 한국어."
-    ).catch(e => ({content: "(교차 실패: "+e.message+")", error: true}))
+    postJson("/api/verify", { content: card.answer_md })
+      .catch(e => ({ content: "(검증 실패: " + e.message + ")", error: true })),
+    postJson("/api/cross", { content: card.answer_md })
+      .catch(e => ({ content: "(교차 실패: " + e.message + ")", error: true })),
+    validateCitations(card.verified_citations || [])
   ];
-  // 딥씽크 추가
   if (deepThink) {
     tasks.push(
-      deepSeekReasonerCall(question).catch(e => ({content: "", reasoning: "(분석 실패: "+e.message+")", error: true}))
+      postJson("/api/reasoner", { question })
+        .catch(e => ({ content: "", reasoning: "(분석 실패: " + e.message + ")", error: true }))
     );
   }
   const results = await Promise.all(tasks);
+  const verifyText = results[0]?.content || "";
+  const crossText = results[1]?.content || "";
+  const cit = results[2] || { rate: 1, total: 0, confirmed: 0 };
+  const reasoner = deepThink ? results[3] : null;
+
+  const verifyAgree = detectAgreement(verifyText);
+  const crossAgree = detectAgreement(crossText);
+  const finalGrade = computeFinalGrade(card.confidence_grade || "B", verifyAgree, crossAgree, cit);
+
   return {
-    verify_text: results[0]?.content || "",
-    cross_text: results[1]?.content || "",
-    deepthink_reasoning: deepThink ? (results[2]?.reasoning || "") : "",
-    deepthink_content: deepThink ? (results[2]?.content || "") : "",
+    verify_text: verifyText,
+    cross_text: crossText,
+    deepthink_reasoning: deepThink ? (reasoner?.reasoning || "") : "",
+    deepthink_content: deepThink ? (reasoner?.content || "") : "",
+    confidence_grade: finalGrade,
+    confidence_breakdown: {
+      claude_grade: card.confidence_grade || "B",
+      verify_agree: verifyAgree,
+      cross_agree: crossAgree,
+      citations: cit
+    }
   };
 }
 
@@ -873,10 +930,17 @@ function renderMessages() {
             ${verifyBlock}
             ${crossBlock}
             ${sourcesHtml ? `<div class="sources"><div class="label">출처 (${c.verified_citations.length}건)</div><ul>${sourcesHtml}</ul></div>` : ""}
-            ${!isStreaming ? `<div class="confidence-row">
-              <span class="badge ${c.confidence_grade}">신뢰도 ${c.confidence_grade}</span>
-              <span style="color:var(--text-mute);">${escapeHtml(c.intent?.domain||"")} · ${c.verified_citations?.length||0}건 인용</span>
-            </div>
+            ${!isStreaming ? (() => {
+              const cb = c.confidence_breakdown;
+              const agreeIcon = a => a > 0 ? "✓" : a < 0 ? "✗" : "−";
+              const tip = cb ? `Claude 자체 평가: ${cb.claude_grade} · DeepSeek 검증: ${agreeIcon(cb.verify_agree)} · Grok 교차: ${agreeIcon(cb.cross_agree)} · 인용 ${cb.citations.confirmed}/${cb.citations.total} 실재 검증` : "Claude 자체 평가";
+              const sub = cb ? `Claude:${cb.claude_grade} · 검증${agreeIcon(cb.verify_agree)} · 교차${agreeIcon(cb.cross_agree)} · 인용 ${cb.citations.confirmed}/${cb.citations.total}` : `${escapeHtml(c.intent?.domain||"")} · ${c.verified_citations?.length||0}건 인용`;
+              return `<div class="confidence-row">
+              <span class="badge ${c.confidence_grade}" title="${escapeHtml(tip)}">신뢰도 ${c.confidence_grade}</span>
+              <span style="color:var(--text-mute);font-size:11px;">${escapeHtml(sub)}</span>
+            </div>`;
+            })() : ""}
+            ${!isStreaming ? `
             <div class="disclaimer"><div class="label">⚖ 디스클레이머</div>${escapeHtml(c.disclaimer)}</div>` : ""}
           </div>
           ${!isStreaming ? `<button class="copy-btn" onclick="window.copyMessage(this)" title="복사">${COPY_SVG}<span>복사</span></button>` : ""}
