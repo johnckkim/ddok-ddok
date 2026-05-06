@@ -290,7 +290,7 @@ body {
   .empty-state h1 { font-size: 18px; white-space: normal; }
 }
 
-@media print {
+
   .answer-card, table, blockquote { page-break-inside: avoid; }
   h1,h2,h3,h4 { page-break-after: avoid; }
   .header,.sidebar,.input-area,.actions { display: none !important; }
@@ -308,20 +308,16 @@ body {
 
 /* === 딥씽크 토글 === */
 .deepthink-toggle {
-  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
-  height: 44px; padding: 0 16px; margin-right: 0;
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 44px; padding: 0 14px; margin-right: 0;
   cursor: pointer; border-radius: 10px;
-  background: transparent; border: 1.5px solid var(--primary);
-  color: var(--primary); font-size: 13px; font-weight: 600;
-  user-select: none; transition: all 0.15s ease; white-space: nowrap;
+  background: var(--primary); border: 1px solid var(--primary);
+  color: white; font-size: 13px; font-weight: 500;
+  user-select: none; transition: all 0.15s; white-space: nowrap;
+  opacity: 0.55;
 }
-.deepthink-toggle:hover { background: rgba(30,58,138,0.08); }
-.deepthink-toggle.on {
-  background: var(--primary); color: white;
-  border-color: var(--primary);
-  box-shadow: 0 2px 8px rgba(30,58,138,0.35);
-}
-.deepthink-toggle.on:hover { background: var(--primary-hover); }
+.deepthink-toggle:hover { opacity: 0.8; }
+.deepthink-toggle.on { opacity: 1; box-shadow: 0 0 0 2px rgba(30,58,138,0.25); }
 .deepthink-toggle input { display: none; }
 .input-row { gap: 8px; align-items: flex-end; }
 
@@ -368,12 +364,12 @@ body {
     <div class="messages" id="messages"></div>
     <div class="input-area">
       <div class="input-row" style="align-items:flex-end;">
-        <label class="deepthink-toggle" id="deepthink-toggle" title="DeepSeek-reasoner로 깊이 분석 (느리지만 정밀)" onclick="var l=this;setTimeout(function(){l.classList.toggle('on',document.getElementById('deepthink-cb').checked)},0)">
+        <label class="deepthink-toggle" id="deepthink-toggle" title="DeepSeek-reasoner로 깊이 분석 (느리지만 정밀)">
           <input type="checkbox" id="deepthink-cb">
-          <span>깊이 분석</span>
+          <span>🧠 깊이 분석</span>
         </label>
-        <textarea id="input" placeholder="법률 질문을 입력하세요. 예) 근로기준법상 연차휴가는 어떻게 발생하나요?" rows="1"></textarea>
-        <button id="btn-send" class="send-btn" title="전송 (Enter)">➤</button>
+        <textarea id="input" placeholder="법률 질문을 입력하세요. 예) 근로기준법상 연차휴가는 어떻게 발생하나요?" rows="1" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();document.getElementById('btn-send').click();}" oninput="this.style.height='44px';this.style.height=Math.min(this.scrollHeight,120)+'px';"></textarea>
+        <button id="btn-send" class="send-btn" title="전송 (Enter)" onclick="var i=document.getElementById('input'),q=i.value.trim();if(!q)return;i.value='';i.style.height='44px';if(typeof ask==='function')ask(q);">➤</button>
       </div>
       <div class="input-hint">Enter 전송 · Shift+Enter 줄바꿈 · 본 답변은 AI 참고 자료입니다 · 변호사 상담 권고</div>
     </div>
@@ -393,7 +389,7 @@ body {
     <label>Grok API Key (선택)</label>
     <input type="password" id="set-grok" placeholder="xai-...">
     <label>국가법령정보 OC (이메일 ID)</label>
-    <input type="text" id="set-law-oc" placeholder="kibie">
+    <input type="text" id="set-law-oc" placeholder="(서버 환경변수 사용)">
     <label><input type="checkbox" id="set-cors-proxy"> CORS 프록시 사용</label>
     <p style="font-size:11px;color:var(--text-mute);margin-top:4px;">
       브라우저에서 CORS 에러 시 활성화. 키가 corsproxy.io를 거치게 됨.
@@ -819,9 +815,7 @@ function renderMessages() {
 
 function renderHistory() {
   const $h = document.getElementById("history-list");
-  $h.innerHTML = state.conversations
-    .filter(c => c.messages && c.messages.length > 0)
-    .map(c => `
+  $h.innerHTML = state.conversations.map(c => `
     <div class="history-item ${c.id === state.currentId ? 'active' : ''}" data-id="${c.id}">
       <span>${escapeHtml(c.title)}</span>
       <button class="delete" data-del="${c.id}" title="삭제">×</button>
@@ -1004,7 +998,7 @@ document.getElementById("btn-save").addEventListener("click", () => {
       document.getElementById("set-anthropic").value = "";
       document.getElementById("set-deepseek").value = k.deepseek || "";
       document.getElementById("set-grok").value = k.grok || "";
-      document.getElementById("set-law-oc").value = k.lawOC || "kibie";
+      document.getElementById("set-law-oc").value = k.lawOC || "";
       document.getElementById("set-cors-proxy").checked = !!k.corsProxy;
       document.getElementById("settings-modal").classList.add("open");
     }, 200);
@@ -1057,21 +1051,11 @@ window.updateRelatedLaws = function(bundle) {
 // 딥씽크 토글 시각 효과
 const $dtCb = document.getElementById("deepthink-cb");
 const $dtToggle = document.getElementById("deepthink-toggle");
-// document-level delegation — survives DOM re-renders
-const _syncDt = () => {
-  const t = document.getElementById("deepthink-toggle");
-  const c = document.getElementById("deepthink-cb");
-  if (t && c) t.classList.toggle("on", c.checked);
-};
-document.addEventListener("click", (e) => {
-  if (e.target.closest && e.target.closest("#deepthink-toggle")) {
-    setTimeout(_syncDt, 0);
-  }
-});
-document.addEventListener("change", (e) => {
-  if (e.target && e.target.id === "deepthink-cb") _syncDt();
-});
-_syncDt();
+if ($dtCb && $dtToggle) {
+  $dtCb.addEventListener("change", () => {
+    $dtToggle.classList.toggle("on", $dtCb.checked);
+  });
+}
 
 
 
