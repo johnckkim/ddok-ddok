@@ -6,7 +6,7 @@ export default async function handler(req) {
   const { target = "law", query = "", display = 5 } = await req.json();
   const url = `https://www.law.go.kr/DRF/lawSearch.do?OC=${oc}&target=${target}&type=JSON&query=${encodeURIComponent(query)}&display=${display}`;
   try {
-    const r = await fetch(url, { headers: { "User-Agent": "LawSkill/2.2" } });
+    const r = await fetch(url, { headers: { "User-Agent": "LawSkill/2.3", "Referer": "https://www.law.go.kr/" } });
     const text = await r.text();
     let data; try { data = JSON.parse(text); } catch { data = { _raw: text.slice(0,300) }; }
     return new Response(JSON.stringify(data), { headers: { "Content-Type": "application/json" }});

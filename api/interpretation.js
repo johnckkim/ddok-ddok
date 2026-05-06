@@ -70,7 +70,7 @@ export default async function handler(req) {
   });
   const url = `https://www.law.go.kr/DRF/lawSearch.do?${params}`;
   try {
-    const r = await fetch(url, { headers: { "User-Agent": "LawSkill/2.3" } });
+    const r = await fetch(url, { headers: { "User-Agent": "LawSkill/2.3", "Referer": "https://www.law.go.kr/" } });
     const text = await r.text();
     let data;
     try { data = JSON.parse(text); } catch { data = { _raw: text.slice(0, 500), _http: r.status }; }
