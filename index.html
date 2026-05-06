@@ -368,7 +368,7 @@ body {
     <div class="messages" id="messages"></div>
     <div class="input-area">
       <div class="input-row" style="align-items:flex-end;">
-        <label class="deepthink-toggle" id="deepthink-toggle" title="DeepSeek-reasoner로 깊이 분석 (느리지만 정밀)">
+        <label class="deepthink-toggle" id="deepthink-toggle" title="DeepSeek-reasoner로 깊이 분석 (느리지만 정밀)" onclick="var l=this;setTimeout(function(){l.classList.toggle('on',document.getElementById('deepthink-cb').checked)},0)">
           <input type="checkbox" id="deepthink-cb">
           <span>깊이 분석</span>
         </label>
