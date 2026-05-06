@@ -887,7 +887,7 @@ function renderMessages() {
 function renderHistory() {
   const $h = document.getElementById("history-list");
   $h.innerHTML = state.conversations
-    .filter(c => c.messages && c.messages.length > 0)
+    .filter(c => (c.messages && c.messages.length > 0) || c.id === state.currentId)
     .map(c => `
     <div class="history-item ${c.id === state.currentId ? 'active' : ''}" data-id="${c.id}">
       <span>${escapeHtml(c.title)}</span>
@@ -1081,10 +1081,18 @@ window.newChat = function() {
   window._typeShown = ""; window._typeTarget = ""; window._typeNode = null;
   // 새 ask 호출이 옛 콜백 무시하도록 askId 증가
   window._askId = (window._askId || 0) + 1;
-  // 빈 "새 대화" 중복 방지: 현재 대화에 메시지 없으면 재사용
+  // 빈 "새 대화" 중복 방지: 현재 대화가 비어있으면 재사용
   const current = curConv();
   if (current && current.messages.length === 0) {
-    renderMessages();
+    renderMessages(); renderHistory();
+    return;
+  }
+  // 다른 곳에 이미 빈 대화가 있으면 그걸 재사용 (orphan 빈 대화 누적 방지)
+  const orphanEmpty = state.conversations.find(c => c.messages.length === 0);
+  if (orphanEmpty) {
+    state.currentId = orphanEmpty.id;
+    localStorage.setItem(KEYS.cur, state.currentId);
+    renderMessages(); renderHistory();
     return;
   }
   const c = { id: "c_"+Date.now(), title: "새 대화", messages: [], createdAt: new Date().toISOString() };
