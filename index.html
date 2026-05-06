@@ -487,7 +487,7 @@ async function lawSearch(target, query, display=10) {
   } catch (e) { return { error: e.message, results: [] }; }
 }
 
-async function claudeCall(messages, system, model="claude-opus-4-6", max_tokens=4096, onDelta=null) {
+async function claudeCall(messages, system, model="claude-opus-4-7", max_tokens=8192, onDelta=null) {
   const stream = !!onDelta;
   const r = await fetch("/api/chat", {
     method: "POST", headers: { "Content-Type": "application/json" },
@@ -580,12 +580,41 @@ async function runPipeline(question, progress, onMainStart, onMainDelta, deepThi
 
   // Opus 메인 답변 — 검색 결과 없이 바로 (사용자 질문만으로)
   if (typeof onMainStart === "function") onMainStart(intent);
-  const mainSys = `한국 법률 전문가. 정확한 법령·판례 인용. 단정형 금지. 구조: ## 핵심 결론 / ## 법적 지위 분류표 / ## 적용 법령 / ## 관련 판례 / ## 반론·소수의견 / ## 실무 권고. 반드시 실재 사건번호만. 마지막 GRADE: A|B|C.`;
+  const mainSys = `당신은 한국 법률 전문가입니다. 정확한 법령·판례를 풍부하게 인용하여 깊이 있는 분석을 제공합니다.
+
+# 작성 원칙
+- 단정형 금지 ("~로 보입니다", "~할 수 있습니다" 등 신중한 표현)
+- 반드시 실재하는 법령명·조항·사건번호만 사용 (가공 금지)
+- 한 사례에 여러 견해가 있을 경우 다수설·소수설 모두 제시
+- 시행일·개정일이 중요한 경우 명시
+- 실무자가 바로 활용할 수 있게 구체적·실용적으로
+
+# 출력 구조 (모든 섹션 충실히)
+## 핵심 결론
+2~4문장으로 결론 + 핵심 근거 요약
+
+## 법적 지위 분류표
+| 구분 | 요건 | 효과 | 근거 조항 |
+형식의 마크다운 표
+
+## 적용 법령
+관련 법령 조항을 인용 + 핵심 내용 풀어 설명 (제○조 제○항 단위로 구체)
+
+## 관련 판례
+대법원/헌법재판소 사건번호 + 핵심 판시사항 요지 (실재만)
+
+## 반론·소수의견
+반대 견해·예외 사례·해석상 다툼이 있는 부분
+
+## 실무 권고
+질문자가 실제로 취할 수 있는 행동 단계 (1, 2, 3 ...)
+
+마지막에 한 줄로 \`GRADE: A|B|C\` (A=확실/판례 명확, B=다수설/통설, C=다툼있음/추론).`;
   const main = await claudeCall(
     [{role:"user", content: question}],
     mainSys,
-    "claude-opus-4-6",
-    4096,
+    "claude-opus-4-7",
+    8192,
     onMainDelta  // streaming
   );
 

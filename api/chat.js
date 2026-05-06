@@ -16,7 +16,7 @@ export default async function handler(req) {
   try { body = await req.json(); } catch {
     return new Response("Invalid JSON", { status: 400 });
   }
-  const { messages, system, model = "claude-opus-4-6", max_tokens = 4096, temperature = 0.2, stream = true } = body;
+  const { messages, system, model = "claude-opus-4-7", max_tokens = 8192, temperature = 0.2, stream = true } = body;
 
   const upstream = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
