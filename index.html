@@ -464,12 +464,15 @@ document.body.setAttribute("data-theme", "light");
 const corsWrap = url => getKeys().corsProxy ? "https://corsproxy.io/?"+encodeURIComponent(url) : url;
 
 async function lawSearch(target, query, display=10) {
-  const k = getKeys();
-  if (!k.lawOC) return { error: "OC 미설정", results: [] };
-  const url = `https://www.law.go.kr/DRF/lawSearch.do?OC=${k.lawOC}&target=${target}&type=JSON&query=${encodeURIComponent(query)}&display=${display}`;
   try {
-    const r = await fetch(corsWrap(url));
+    const r = await fetch("/api/lawsearch", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ target, query, display })
+    });
+    if (!r.ok) return { error: "lawsearch " + r.status, results: [] };
     const data = await r.json();
+    if (data.error) return { error: data.error, results: [] };
     if (data.result && (data.msg || String(data.result).startsWith("필수입력"))) {
       return { error: data.msg || "활용신청 미완료", results: [] };
     }
@@ -480,16 +483,10 @@ async function lawSearch(target, query, display=10) {
 }
 
 async function claudeCall(messages, system, model="claude-opus-4-6", max_tokens=4096, onDelta=null) {
-  const k = getKeys();
   const stream = !!onDelta;
-  const r = await fetch("https://api.anthropic.com/v1/messages", {
+  const r = await fetch("/api/chat", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": k.anthropic,
-      "anthropic-version": "2023-06-01",
-      "anthropic-dangerous-direct-browser-access": "true"
-    },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ model, max_tokens, system, messages, temperature: 0.2, stream })
   });
   if (!r.ok) throw new Error("Claude " + r.status + ": " + (await r.text()).slice(0,200));
@@ -547,27 +544,17 @@ async function deepseekCall(messages, system, max_tokens=1200) {
 }
 
 async function deepSeekReasonerCall(question) {
-  const k = getKeys();
-  if (!k.deepseek) return { content: "", reasoning: "", skipped: true };
-  const r = await fetch("https://api.deepseek.com/chat/completions", {
+  const r = await fetch("/api/reasoner", {
     method: "POST",
-    headers: { "Content-Type": "application/json", "Authorization": "Bearer " + k.deepseek },
-    body: JSON.stringify({
-      model: "deepseek-reasoner",
-      messages: [
-        { role: "system", content: "한국 법률 전문가. 단계별로 깊이 사고한 후 답변. JSON 출력 금지." },
-        { role: "user", content: question }
-      ],
-      max_tokens: 4096
-    })
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ question })
   });
-  if (!r.ok) throw new Error("DeepSeek-reasoner " + r.status);
-  const d = await r.json();
-  const msg = d.choices[0].message;
+  if (!r.ok) throw new Error("Reasoner " + r.status);
+  const data = await r.json();
   return {
-    content: msg.content || "",
-    reasoning: msg.reasoning_content || "",
-    usage: d.usage
+    content: data.content || "",
+    reasoning: data.reasoning || "",
+    skipped: !!data.skipped
   };
 }
 
@@ -633,20 +620,23 @@ async function runPipeline(question, progress, onMainStart, onMainDelta, deepThi
 
 // === 백그라운드 검증 (답변 표시 후) ===
 async function runVerification(card, question, deepThink) {
+  const postJson = (url, body) => fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body)
+  }).then(r => r.ok ? r.json() : Promise.reject(new Error(url + " " + r.status)));
+
   const tasks = [
-    deepseekCall(
-      [{role:"user", content: `다음 답변의 논리 결함·인용 오류 점검 (300토큰):\n${card.answer_md.slice(0,2500)}`}],
-      "한국 법률 검증자. 간결."
-    ).catch(e => ({content: "(검증 실패: "+e.message+")", error: true})),
-    grokCall(
-      [{role:"user", content: `검증 (200토큰):\n${card.answer_md.slice(0,1200)}`}],
-      "한국 법률 교차검증자. 200토큰 한국어."
-    ).catch(e => ({content: "(교차 실패: "+e.message+")", error: true}))
+    postJson("/api/verify", { content: card.answer_md })
+      .catch(e => ({content: "(검증 실패: "+e.message+")", error: true})),
+    postJson("/api/cross", { content: card.answer_md })
+      .catch(e => ({content: "(교차 실패: "+e.message+")", error: true}))
   ];
   // 딥씽크 추가
   if (deepThink) {
     tasks.push(
-      deepSeekReasonerCall(question).catch(e => ({content: "", reasoning: "(분석 실패: "+e.message+")", error: true}))
+      postJson("/api/reasoner", { question })
+        .catch(e => ({content: "", reasoning: "(분석 실패: "+e.message+")", error: true}))
     );
   }
   const results = await Promise.all(tasks);
@@ -659,11 +649,16 @@ async function runVerification(card, question, deepThink) {
 }
 
 async function classifyQuestion(q) {
-  const sys = "한국 법률 분류기. JSON만. 키: domain(민사/형사/행정/노동/가사/상사/헌법/기타), keywords(string[]), intent_type(정의조회/사례분석/절차안내).";
   try {
-    const r = await deepseekCall([{role:"user", content: q}], sys, 300);
-    if (r.skipped) return { domain: "기타", keywords: [q.slice(0,20)] };
-    const m = r.content.match(/\{[\s\S]*\}/);
+    const r = await fetch("/api/classify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ question: q })
+    });
+    if (!r.ok) return { domain: "기타", keywords: [q.slice(0,20)], _error: "classify " + r.status };
+    const data = await r.json();
+    if (data.skipped) return { domain: "기타", keywords: [q.slice(0,20)] };
+    const m = (data.content || "").match(/\{[\s\S]*\}/);
     return m ? JSON.parse(m[0]) : { domain: "기타", keywords: [q.slice(0,20)] };
   } catch (e) {
     return { domain: "기타", keywords: [q.slice(0,20)], _error: e.message };
@@ -983,20 +978,7 @@ document.getElementById("btn-save").addEventListener("click", () => {
   alert("저장 완료. 다음 요청부터 적용됩니다.");
 });
 
-// === 첫 실행 시 API 키 모달 자동 표시 ===
-(function() {
-  const k = getKeys();
-  if (!k.anthropic) {
-    setTimeout(() => {
-      document.getElementById("set-anthropic").value = "";
-      document.getElementById("set-deepseek").value = k.deepseek || "";
-      document.getElementById("set-grok").value = k.grok || "";
-      document.getElementById("set-law-oc").value = k.lawOC || "kibie";
-      document.getElementById("set-cors-proxy").checked = !!k.corsProxy;
-      document.getElementById("settings-modal").classList.add("open");
-    }, 200);
-  }
-})();
+// === 첫 실행 시 API 키 모달 자동 표시 — 비활성화됨 (proxy 모드, 클라이언트 키 불필요) ===
 
 
 
