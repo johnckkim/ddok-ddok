@@ -78,6 +78,7 @@
 ### 9. 후속 fix
 - 📝 `c67874a` CHANGELOG.md 추가 (Drive + dev 양쪽)
 - 🐛 `6551155` 새 대화 시 깊이 분석 토글 OFF 자동 리셋
+- ✨ **`da23ef4` 답변 중단 기능** — `AbortController` per-conv + 진행 중에는 send 버튼이 빨간 ■ stop 버튼으로 변신, 클릭 시 즉시 중단 + "사용자가 중단함" 마킹
 
 ---
 
