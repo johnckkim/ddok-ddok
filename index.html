@@ -201,31 +201,42 @@ body {
   padding: 16px max(20px, 12%); background: var(--panel);
   border-top: 1px solid var(--border);
 }
-.input-row { display: flex; gap: 8px; }
-.input-row textarea {
-  flex: 1; padding: 12px 14px; font-size: 14px;
-  border: 1px solid var(--border); border-radius: 8px;
-  resize: none; font-family: inherit;
-  min-height: 44px; max-height: 120px; outline: none;
-  background: var(--bg); color: var(--text);
+/* === 새 입력 박스 (DeepSeek 스타일: textarea 위, 액션 아래) === */
+.input-box {
+  display: flex; flex-direction: column; gap: 8px;
+  background: var(--bg);
+  border: 1px solid var(--border); border-radius: 18px;
+  padding: 12px 14px;
+  transition: border-color 0.15s, box-shadow 0.15s;
 }
-.input-row textarea:focus {
+.input-box:focus-within {
   border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(30,58,138,0.15);
+  box-shadow: 0 0 0 3px rgba(30,58,138,0.12);
 }
-.input-row .send-btn {
+.input-box textarea {
+  width: 100%; border: 0; outline: 0; padding: 4px 0;
+  font-size: 14px; line-height: 1.5; resize: none; font-family: inherit;
+  min-height: 28px; max-height: 200px;
+  background: transparent; color: var(--text);
+}
+.input-actions {
+  display: flex; align-items: center; gap: 8px;
+}
+.input-actions .send-btn {
+  margin-left: auto;
   background: var(--primary); color: white; border: 0;
-  width: 44px; height: 44px; min-width: 44px;
-  border-radius: 10px; font-size: 18px; cursor: pointer;
+  width: 36px; height: 36px; min-width: 36px;
+  border-radius: 50%; cursor: pointer; font-size: 14px;
   display: flex; align-items: center; justify-content: center;
-  transition: background 0.15s, transform 0.1s;
-  padding: 0;
+  transition: background 0.15s, transform 0.1s; padding: 0;
 }
-.input-row .send-btn:hover:not(:disabled) {
+.input-actions .send-btn:hover:not(:disabled) {
   background: var(--primary-hover); transform: translateY(-1px);
 }
-.input-row .send-btn:active:not(:disabled) { transform: translateY(0); }
-.input-row .send-btn:disabled { background: var(--text-mute); cursor: not-allowed; transform: none; }
+.input-actions .send-btn:active:not(:disabled) { transform: translateY(0); }
+.input-actions .send-btn:disabled { background: var(--text-mute); cursor: not-allowed; transform: none; }
+/* deepthink toggle을 input-actions 내부 크기에 맞춤 */
+.input-actions .deepthink-toggle { height: 34px; padding: 0 12px; font-size: 12.5px; border-radius: 17px; }
 .input-hint {
   font-size: 11px; color: var(--text-mute); margin-top: 6px; text-align: right;
 }
@@ -365,13 +376,15 @@ body {
   <main class="chat-area">
     <div class="messages" id="messages"><div class="welcome-message" style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;min-height:60vh;color:#666;text-align:center;padding:40px 20px;"><p style="color:#1a3a6c;font-size:27px;font-weight:600;margin-bottom:8px;">경현님 안녕하세요</p><h2 style="font-size:56px;color:#1a3a6c;font-weight:700;letter-spacing:-1px;">법률 전문 도우미 똑똑 입니다</h2></div></div>
     <div class="input-area">
-      <div class="input-row" style="align-items:flex-end;">
-        <label class="deepthink-toggle" id="deepthink-toggle" onclick="var l=this;setTimeout(function(){l.classList.toggle('on',document.getElementById('deepthink-cb').checked)},0)">
-          <input type="checkbox" id="deepthink-cb">
-          <span>깊이 분석</span>
-        </label>
-        <textarea id="input" placeholder="법률 질문을 입력하세요. 예) 근로기준법상 연차휴가는 어떻게 발생하나요?" rows="1" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();document.getElementById('btn-send').click();}" oninput="this.style.height='44px';this.style.height=Math.min(this.scrollHeight,120)+'px';"></textarea>
-        <button id="btn-send" class="send-btn" title="전송 (Enter)" onclick="var i=document.getElementById('input'),q=i.value.trim();if(!q)return;i.value='';i.style.height='44px';if(typeof ask==='function')ask(q);">➤</button>
+      <div class="input-box">
+        <textarea id="input" placeholder="법률 질문을 입력하세요. 예) 근로기준법상 연차휴가는 어떻게 발생하나요?" rows="1" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();document.getElementById('btn-send').click();}" oninput="this.style.height='28px';this.style.height=Math.min(this.scrollHeight,200)+'px';"></textarea>
+        <div class="input-actions">
+          <label class="deepthink-toggle" id="deepthink-toggle" onclick="var l=this;setTimeout(function(){l.classList.toggle('on',document.getElementById('deepthink-cb').checked)},0)">
+            <input type="checkbox" id="deepthink-cb">
+            <span>깊이 분석</span>
+          </label>
+          <button id="btn-send" class="send-btn" title="전송 (Enter)" onclick="var i=document.getElementById('input'),q=i.value.trim();if(!q)return;i.value='';i.style.height='28px';if(typeof ask==='function')ask(q);">➤</button>
+        </div>
       </div>
       <div class="input-hint">Enter 전송 · Shift+Enter 줄바꿈 · 본 답변은 AI 참고 자료입니다 · 변호사 상담 권고</div>
     </div>
