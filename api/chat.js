@@ -16,7 +16,8 @@ export default async function handler(req) {
   try { body = await req.json(); } catch {
     return new Response("Invalid JSON", { status: 400 });
   }
-  const { messages, system, model = "claude-opus-4-7", max_tokens = 8192, temperature = 0.2, stream = true } = body;
+  const { messages, system, model = "claude-opus-4-7", max_tokens = 8192, stream = true } = body;
+  // 주의: Opus 4.7+ 에서 temperature 파라미터 deprecated → 보내지 않음
 
   const upstream = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
@@ -25,7 +26,7 @@ export default async function handler(req) {
       "x-api-key": apiKey,
       "anthropic-version": "2023-06-01"
     },
-    body: JSON.stringify({ model, max_tokens, system, messages, temperature, stream })
+    body: JSON.stringify({ model, max_tokens, system, messages, stream })
   });
 
   if (!upstream.ok) {

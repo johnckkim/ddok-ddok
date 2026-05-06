@@ -503,7 +503,7 @@ async function claudeCall(messages, system, model="claude-opus-4-7", max_tokens=
   const stream = !!onDelta;
   const r = await fetch("/api/chat", {
     method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ model, max_tokens, system, messages, temperature: 0.2, stream })
+    body: JSON.stringify({ model, max_tokens, system, messages, stream })
   });
   if (!r.ok) throw new Error("API " + r.status + ": " + (await r.text()).slice(0,200));
   if (!stream) {
@@ -929,6 +929,8 @@ async function ask(question) {
   // 스트리밍 시 카드 즉시 생성 + delta마다 업데이트
   let streamCard = null;
   const onMainStart = (intent) => {
+    // 타이프라이터 상태 리셋
+    if (typeof _onMainStartReset === "function") _onMainStartReset();
     // progress 제거하고 빈 카드 생성
     conv.messages = conv.messages.filter(m => m.role !== "progress");
     streamCard = {
@@ -947,23 +949,43 @@ async function ask(question) {
     conv.messages.push(streamCard);
     renderMessages();
   };
-  // === 진짜 부드러운 타이핑: 스트리밍 중에는 plain text만 갱신 (markdown 재파싱 X) ===
-  // → 답변 완료 후 try{} 블록에서 renderMessages()가 최종 markdown 렌더링
+  // === 진짜 타이프라이터: API chunks를 버퍼에 받아 rAF로 1~Ncps 점진 출력 ===
+  let _typeShown = "";
+  let _typeTarget = "";
+  let _typeRaf = null;
+  const _typewriterTick = () => {
+    if (_typeShown.length >= _typeTarget.length) {
+      _typeRaf = null;
+      return;
+    }
+    const lag = _typeTarget.length - _typeShown.length;
+    // 적응형: 뒤처지면 빠르게 따라잡고, 따라잡으면 1글자씩
+    let step = 1;
+    if (lag > 300) step = 10;
+    else if (lag > 120) step = 4;
+    else if (lag > 40) step = 2;
+    _typeShown = _typeTarget.slice(0, _typeShown.length + step);
+    const $body = document.getElementById("_streaming_body");
+    if ($body) {
+      $body.textContent = _typeShown;
+      if (!$body.style.whiteSpace) {
+        $body.style.whiteSpace = "pre-wrap";
+        $body.style.lineHeight = "1.7";
+      }
+      const $msgs = document.getElementById("messages");
+      if ($msgs) $msgs.scrollTop = $msgs.scrollHeight;
+    }
+    _typeRaf = requestAnimationFrame(_typewriterTick);
+  };
+  const _onMainStartReset = () => {
+    _typeShown = ""; _typeTarget = "";
+    if (_typeRaf) { cancelAnimationFrame(_typeRaf); _typeRaf = null; }
+  };
   const onMainDelta = (delta, full) => {
     if (!streamCard) return;
     streamCard.card.answer_md = full;
-    const $body = document.getElementById("_streaming_body");
-    if ($body) {
-      // textContent + pre-wrap = 매 delta마다 부담 없이 타이핑 효과
-      $body.textContent = full;
-      $body.style.whiteSpace = "pre-wrap";
-      $body.style.fontFamily = "inherit";
-      $body.style.lineHeight = "1.7";
-      const $msgs = document.getElementById("messages");
-      if ($msgs) $msgs.scrollTop = $msgs.scrollHeight;
-    } else if (full.length % 80 < 5) {
-      renderMessages();
-    }
+    _typeTarget = full;
+    if (!_typeRaf) _typeRaf = requestAnimationFrame(_typewriterTick);
   };
 
   try {
