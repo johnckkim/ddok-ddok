@@ -1,40 +1,40 @@
 // /api/interpretation — 부처별 법령 해석례 통합 (국세청·국토부·고용부 + 법제처)
-// LINK형 — open.law.go.kr 직접 호출 (국가법령정보 DRF, OC=kibie 사용)
-// target 옵션:
-//   expc  — 법령해석례 (법제처 + 각 부처 통합)
-//   licbyl — 행정해석 (각 행정부처)
-//   admrul — 행정규칙
-// 부처 필터(orgCls)로 국세청·국토부·고용부 등 세분화 가능.
+// LINK형 — open.law.go.kr 직접 호출 (국가법령정보 DRF)
+//
+// 인증 상태(2026-05-07 검증):
+//   OC=kibie 는 target=law (법령) / target=prec (판례) 두 종류만 인증됨.
+//   target=expc (법령해석례), target=ntsCgmExpc (국세청), target=molitCgmExpc(국토부),
+//   target=moelCgmExpc (고용부), target=licbyl (행정해석), target=admrul (행정규칙) 은
+//   별도로 open.law.go.kr 에 IP/도메인 등록이 필요 — kibie 는 미인증.
+//
+// 동작:
+//   1) 인증 가능한 target (law/prec) 은 정상 프록시
+//   2) 미인증 target 은 명확한 안내 메시지 반환 (mock 아님 — 실제 등록 안내)
 export const config = { runtime: "edge" };
 
-const TARGET_BY_AGENCY = {
-  // 부처 키 → DRF 검색용 부처명 (법령해석례 검색 시 검색어로 결합)
-  국세청: "국세청",
-  국세: "국세청",
-  세무: "국세청",
-  세법: "국세청",
-  국토교통부: "국토교통부",
-  국토부: "국토교통부",
-  부동산: "국토교통부",
-  건축: "국토교통부",
-  고용노동부: "고용노동부",
-  고용부: "고용노동부",
-  노동: "고용노동부",
-  근로: "고용노동부",
-  법제처: "법제처"
+const AGENCY_TO_TARGET = {
+  국세청: "ntsCgmExpc",
+  국세: "ntsCgmExpc",
+  세무: "ntsCgmExpc",
+  세법: "ntsCgmExpc",
+  국토교통부: "molitCgmExpc",
+  국토부: "molitCgmExpc",
+  부동산: "molitCgmExpc",
+  건축: "molitCgmExpc",
+  고용노동부: "moelCgmExpc",
+  고용부: "moelCgmExpc",
+  노동: "moelCgmExpc",
+  근로: "moelCgmExpc",
+  법제처: "expc"
 };
+
+const AUTHENTICATED_TARGETS = new Set(["law", "prec"]);
 
 export default async function handler(req) {
   if (req.method !== "POST") return new Response("Method not allowed", { status: 405 });
   const oc = process.env.LAW_GO_KR_OC || "kibie";
   const body = await req.json().catch(() => ({}));
-  const {
-    query = "",
-    target = "expc", // expc | licbyl | admrul
-    agency = "",     // 국세청 | 국토교통부 | 고용노동부 | 법제처 | "" (전체)
-    display = 5,
-    page = 1
-  } = body;
+  const { query = "", target: targetIn, agency = "", display = 5, page = 1 } = body;
 
   if (!query) {
     return new Response(JSON.stringify({ error: "query required", results: [] }), {
@@ -42,15 +42,29 @@ export default async function handler(req) {
     });
   }
 
-  // 부처 필터링: 검색어에 부처명을 prefix로 추가하면 정확도 향상
-  const agencyName = TARGET_BY_AGENCY[agency] || agency || "";
-  const finalQuery = agencyName ? `${agencyName} ${query}` : query;
+  // Determine target
+  let target = targetIn;
+  if (!target) {
+    target = AGENCY_TO_TARGET[agency] || "expc";
+  }
 
+  // If specialized target not authenticated → informative skip
+  if (!AUTHENTICATED_TARGETS.has(target)) {
+    return new Response(JSON.stringify({
+      skipped: true,
+      reason: `target=${target} 은 OC=${oc} 로 미인증`,
+      hint: "open.law.go.kr 에서 별도 IP/도메인 등록 후 사용 가능. 또는 target=law (법령) / target=prec (판례) 사용",
+      authenticated_targets: Array.from(AUTHENTICATED_TARGETS),
+      results: []
+    }), { status: 200, headers: { "Content-Type": "application/json" }});
+  }
+
+  // Authenticated target — call DRF
   const params = new URLSearchParams({
     OC: oc,
     target,
     type: "JSON",
-    query: finalQuery,
+    query,
     display: String(display),
     page: String(page)
   });
@@ -60,8 +74,8 @@ export default async function handler(req) {
     const text = await r.text();
     let data;
     try { data = JSON.parse(text); } catch { data = { _raw: text.slice(0, 500), _http: r.status }; }
-    if (data.result && (data.msg || String(data.result).startsWith("필수입력"))) {
-      return new Response(JSON.stringify({ error: data.msg || "OC 미인증", results: [] }), {
+    if (data.result && data.msg) {
+      return new Response(JSON.stringify({ error: data.msg, _result: data.result, results: [] }), {
         status: 200, headers: { "Content-Type": "application/json" }
       });
     }
