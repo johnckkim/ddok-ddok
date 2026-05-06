@@ -290,7 +290,7 @@ body {
   .empty-state h1 { font-size: 18px; white-space: normal; }
 }
 
-@media print {
+
   .answer-card, table, blockquote { page-break-inside: avoid; }
   h1,h2,h3,h4 { page-break-after: avoid; }
   .header,.sidebar,.input-area,.actions { display: none !important; }
@@ -308,7 +308,7 @@ body {
 
 /* === 딥씽크 토글 === */
 .deepthink-toggle {
-  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  display: inline-flex; align-items: center; gap: 6px;
   height: 44px; padding: 0 14px; margin-right: 0;
   cursor: pointer; border-radius: 10px;
   background: var(--primary); border: 1px solid var(--primary);
@@ -348,11 +348,7 @@ body {
 <div class="app">
   <header class="header">
     <div class="logo">똑똑</div>
-    <div class="actions">
-      <button id="btn-theme" title="테마 전환">🌙</button>
-      <button id="btn-export" title="인쇄/내보내기">🖨</button>
-      <button id="btn-settings" title="설정">⚙</button>
-    </div>
+    
   </header>
   <aside class="sidebar">
     <button class="new-chat" id="btn-new-chat">+ 새 대화</button>
@@ -370,7 +366,7 @@ body {
       <div class="input-row" style="align-items:flex-end;">
         <label class="deepthink-toggle" id="deepthink-toggle" title="DeepSeek-reasoner로 깊이 분석 (느리지만 정밀)">
           <input type="checkbox" id="deepthink-cb">
-          <span>깊이 분석</span>
+          <span>🧠 깊이 분석</span>
         </label>
         <textarea id="input" placeholder="법률 질문을 입력하세요. 예) 근로기준법상 연차휴가는 어떻게 발생하나요?" rows="1"></textarea>
         <button id="btn-send" class="send-btn" title="전송 (Enter)">➤</button>
@@ -466,36 +462,27 @@ const corsWrap = url => getKeys().corsProxy ? "https://corsproxy.io/?"+encodeURI
 async function lawSearch(target, query, display=10) {
   try {
     const r = await fetch("/api/lawsearch", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
+      method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ target, query, display })
     });
-    if (!r.ok) return { error: "lawsearch " + r.status, results: [] };
+    if (!r.ok) return { error: "search "+r.status, results: [] };
     const data = await r.json();
     if (data.error) return { error: data.error, results: [] };
-    if (data.result && (data.msg || String(data.result).startsWith("필수입력"))) {
-      return { error: data.msg || "활용신청 미완료", results: [] };
-    }
     return { ok: true, raw: data };
-  } catch (e) {
-    return { error: "fetch 실패: " + e.message, results: [] };
-  }
+  } catch (e) { return { error: e.message, results: [] }; }
 }
 
 async function claudeCall(messages, system, model="claude-opus-4-6", max_tokens=4096, onDelta=null) {
   const stream = !!onDelta;
   const r = await fetch("/api/chat", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
+    method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ model, max_tokens, system, messages, temperature: 0.2, stream })
   });
-  if (!r.ok) throw new Error("Claude " + r.status + ": " + (await r.text()).slice(0,200));
+  if (!r.ok) throw new Error("API " + r.status + ": " + (await r.text()).slice(0,200));
   if (!stream) {
     const d = await r.json();
-    const text = d.content.filter(b => b.type === "text").map(b => b.text).join("");
-    return { content: text, usage: d.usage };
+    return { content: (d.content||[]).filter(b=>b.type==="text").map(b=>b.text).join(""), usage: d.usage };
   }
-  // === Streaming SSE ===
   const reader = r.body.getReader();
   const decoder = new TextDecoder();
   let buf = "", text = "", usage = {};
@@ -514,11 +501,8 @@ async function claudeCall(messages, system, model="claude-opus-4-6", max_tokens=
         if (ev.type === "content_block_delta" && ev.delta?.type === "text_delta") {
           text += ev.delta.text;
           onDelta(ev.delta.text, text);
-        } else if (ev.type === "message_delta" && ev.usage) {
-          usage = { ...usage, ...ev.usage };
-        } else if (ev.type === "message_start" && ev.message?.usage) {
-          usage = { ...ev.message.usage };
-        }
+        } else if (ev.type === "message_delta" && ev.usage) usage = { ...usage, ...ev.usage };
+        else if (ev.type === "message_start" && ev.message?.usage) usage = { ...ev.message.usage };
       } catch {}
     }
   }
@@ -526,54 +510,38 @@ async function claudeCall(messages, system, model="claude-opus-4-6", max_tokens=
 }
 
 async function deepseekCall(messages, system, max_tokens=1200) {
-  const k = getKeys();
-  if (!k.deepseek) return { content: "(DeepSeek 키 미설정 — 검증 생략)", skipped: true };
-  const r = await fetch("https://api.deepseek.com/chat/completions", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "Authorization": "Bearer " + k.deepseek },
-    body: JSON.stringify({
-      model: "deepseek-chat",
-      messages: [{role:"system",content:system}, ...messages],
-      temperature: 0.2,
-      max_tokens
-    })
-  });
-  if (!r.ok) throw new Error("DeepSeek " + r.status);
-  const d = await r.json();
-  return { content: d.choices[0].message.content, usage: d.usage };
+  const content = messages[messages.length-1]?.content || "";
+  try {
+    const r = await fetch("/api/verify", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content })
+    });
+    if (!r.ok) return { content: "(검증 실패)", error: true };
+    return await r.json();
+  } catch (e) { return { content: "(검증 실패: "+e.message+")", error: true }; }
 }
 
 async function deepSeekReasonerCall(question) {
-  const r = await fetch("/api/reasoner", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ question })
-  });
-  if (!r.ok) throw new Error("Reasoner " + r.status);
-  const data = await r.json();
-  return {
-    content: data.content || "",
-    reasoning: data.reasoning || "",
-    skipped: !!data.skipped
-  };
+  try {
+    const r = await fetch("/api/reasoner", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ question })
+    });
+    if (!r.ok) return { content: "", reasoning: "(분석 실패)", error: true };
+    return await r.json();
+  } catch (e) { return { content: "", reasoning: "(분석 실패: "+e.message+")", error: true }; }
 }
 
 async function grokCall(messages, system, max_tokens=400) {
-  const k = getKeys();
-  if (!k.grok) return { content: "(Grok 키 미설정 — 교차 검증 생략)", skipped: true };
-  const r = await fetch("https://api.x.ai/v1/chat/completions", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "Authorization": "Bearer " + k.grok },
-    body: JSON.stringify({
-      model: "grok-4-fast",
-      messages: [{role:"system",content:system}, ...messages],
-      temperature: 0.2,
-      max_tokens
-    })
-  });
-  if (!r.ok) throw new Error("Grok " + r.status);
-  const d = await r.json();
-  return { content: d.choices[0].message.content, usage: d.usage };
+  const content = messages[messages.length-1]?.content || "";
+  try {
+    const r = await fetch("/api/cross", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content })
+    });
+    if (!r.ok) return { content: "(교차 실패)", error: true };
+    return await r.json();
+  } catch (e) { return { content: "(교차 실패: "+e.message+")", error: true }; }
 }
 
 // ============ 4-Pass Pipeline ============
@@ -620,23 +588,20 @@ async function runPipeline(question, progress, onMainStart, onMainDelta, deepThi
 
 // === 백그라운드 검증 (답변 표시 후) ===
 async function runVerification(card, question, deepThink) {
-  const postJson = (url, body) => fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body)
-  }).then(r => r.ok ? r.json() : Promise.reject(new Error(url + " " + r.status)));
-
   const tasks = [
-    postJson("/api/verify", { content: card.answer_md })
-      .catch(e => ({content: "(검증 실패: "+e.message+")", error: true})),
-    postJson("/api/cross", { content: card.answer_md })
-      .catch(e => ({content: "(교차 실패: "+e.message+")", error: true}))
+    deepseekCall(
+      [{role:"user", content: `다음 답변의 논리 결함·인용 오류 점검 (300토큰):\n${card.answer_md.slice(0,2500)}`}],
+      "한국 법률 검증자. 간결."
+    ).catch(e => ({content: "(검증 실패: "+e.message+")", error: true})),
+    grokCall(
+      [{role:"user", content: `검증 (200토큰):\n${card.answer_md.slice(0,1200)}`}],
+      "한국 법률 교차검증자. 200토큰 한국어."
+    ).catch(e => ({content: "(교차 실패: "+e.message+")", error: true}))
   ];
   // 딥씽크 추가
   if (deepThink) {
     tasks.push(
-      postJson("/api/reasoner", { question })
-        .catch(e => ({content: "", reasoning: "(분석 실패: "+e.message+")", error: true}))
+      deepSeekReasonerCall(question).catch(e => ({content: "", reasoning: "(분석 실패: "+e.message+")", error: true}))
     );
   }
   const results = await Promise.all(tasks);
@@ -651,18 +616,14 @@ async function runVerification(card, question, deepThink) {
 async function classifyQuestion(q) {
   try {
     const r = await fetch("/api/classify", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
+      method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ question: q })
     });
-    if (!r.ok) return { domain: "기타", keywords: [q.slice(0,20)], _error: "classify " + r.status };
-    const data = await r.json();
-    if (data.skipped) return { domain: "기타", keywords: [q.slice(0,20)] };
-    const m = (data.content || "").match(/\{[\s\S]*\}/);
+    if (!r.ok) return { domain: "기타", keywords: [q.slice(0,20)] };
+    const d = await r.json();
+    const m = d.content?.match(/\{[\s\S]*\}/);
     return m ? JSON.parse(m[0]) : { domain: "기타", keywords: [q.slice(0,20)] };
-  } catch (e) {
-    return { domain: "기타", keywords: [q.slice(0,20)], _error: e.message };
-  }
+  } catch (e) { return { domain: "기타", keywords: [q.slice(0,20)] }; }
 }
 
 async function searchLegalDB(intent) {
@@ -817,7 +778,9 @@ function renderMessages() {
 
 function renderHistory() {
   const $h = document.getElementById("history-list");
-  $h.innerHTML = state.conversations.map(c => `
+  $h.innerHTML = state.conversations
+    .filter(c => c.messages && c.messages.length > 0)
+    .map(c => `
     <div class="history-item ${c.id === state.currentId ? 'active' : ''}" data-id="${c.id}">
       <span>${escapeHtml(c.title)}</span>
       <button class="delete" data-del="${c.id}" title="삭제">×</button>
@@ -967,7 +930,7 @@ document.getElementById("btn-theme").addEventListener("click", () => {
   localStorage.setItem(KEYS.theme, next);
   document.getElementById("btn-theme").textContent = next === "light" ? "🌙" : "☀";
 });
-document.getElementById("btn-export").addEventListener("click", () => window.print());
+
 document.getElementById("btn-settings").addEventListener("click", () => {
   const k = getKeys();
   document.getElementById("set-anthropic").value = k.anthropic || "";
@@ -992,7 +955,20 @@ document.getElementById("btn-save").addEventListener("click", () => {
   alert("저장 완료. 다음 요청부터 적용됩니다.");
 });
 
-// === 첫 실행 시 API 키 모달 자동 표시 — 비활성화됨 (proxy 모드, 클라이언트 키 불필요) ===
+// === 첫 실행 시 API 키 모달 자동 표시 ===
+(function() {
+  const k = getKeys();
+  if (!k.anthropic) {
+    setTimeout(() => {
+      document.getElementById("set-anthropic").value = "";
+      document.getElementById("set-deepseek").value = k.deepseek || "";
+      document.getElementById("set-grok").value = k.grok || "";
+      document.getElementById("set-law-oc").value = k.lawOC || "kibie";
+      document.getElementById("set-cors-proxy").checked = !!k.corsProxy;
+      document.getElementById("settings-modal").classList.add("open");
+    }, 200);
+  }
+})();
 
 
 
@@ -1009,4 +985,54 @@ window.updateRelatedLaws = function(bundle) {
   // law.go.kr LawSearch
   const tryLaws = lawsRaw?.LawSearch?.law || lawsRaw?.law || [];
   const lawArr = Array.isArray(tryLaws) ? tryLaws : (tryLaws ? [tryLaws] : []);
-  lawArr.sli
+  lawArr.slice(0,5).forEach(l => {
+    const title = l.법령명한글 || l.법령명 || l.title;
+    if (!title) return;
+    const link = l.법령상세링크 ? "https://www.law.go.kr"+l.법령상세링크 :
+      "https://www.law.go.kr/lsSc.do?query="+encodeURIComponent(title);
+    items.push({ raw: title.slice(0,28), url: link });
+  });
+  // 판례
+  const tryPrecs = casesRaw?.PrecSearch?.prec || casesRaw?.prec || [];
+  const precArr = Array.isArray(tryPrecs) ? tryPrecs : (tryPrecs ? [tryPrecs] : []);
+  precArr.slice(0,5).forEach(p => {
+    const title = p.사건명 || p.사건번호 || p.title;
+    if (!title) return;
+    const link = p.판례상세링크 ? "https://www.law.go.kr"+p.판례상세링크 :
+      "https://www.law.go.kr/precSc.do?query="+encodeURIComponent(p.사건번호||title);
+    items.push({ raw: title.slice(0,28), url: link });
+  });
+  if (items.length) {
+    $rl.innerHTML = items.map(c =>
+      `<div class="law-chip" onclick="window.open('${c.url}','_blank')" style="cursor:pointer">${escapeHtml(c.raw)}</div>`
+    ).join("");
+    $panel.style.display = "block";
+  } else {
+    $panel.style.display = "none";
+  }
+};
+
+
+// 딥씽크 토글 시각 효과
+const $dtCb = document.getElementById("deepthink-cb");
+const $dtToggle = document.getElementById("deepthink-toggle");
+if ($dtCb && $dtToggle) {
+  $dtCb.addEventListener("change", () => {
+    $dtToggle.classList.toggle("on", $dtCb.checked);
+  });
+}
+
+
+
+renderHistory();
+renderMessages();
+
+// DOMContentLoaded 보강 — 환영 메시지 즉시 표시
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", () => { renderMessages(); renderHistory(); });
+} else {
+  setTimeout(() => { renderMessages(); }, 0);
+}
+</script>
+</body>
+</html>
