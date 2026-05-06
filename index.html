@@ -249,6 +249,8 @@ body {
 }
 .input-actions .send-btn:active:not(:disabled) { transform: translateY(0); }
 .input-actions .send-btn:disabled { background: var(--text-mute); cursor: not-allowed; transform: none; }
+.input-actions .send-btn.stop-mode { background: #dc2626; font-size: 12px; font-weight: 700; }
+.input-actions .send-btn.stop-mode:hover { background: #b91c1c; }
 /* deepthink toggle을 input-actions 내부 크기에 맞춤 */
 .input-actions .deepthink-toggle { height: 34px; padding: 0 14px; font-size: 12.5px; border-radius: 17px; gap: 0; }
 .input-actions .deepthink-toggle span { display: inline-block; text-align: center; line-height: 1; }
@@ -406,7 +408,7 @@ body {
             <input type="checkbox" id="deepthink-cb">
             <span>깊이 분석</span>
           </label>
-          <button id="btn-send" class="send-btn" title="전송 (Enter)" onclick="var i=document.getElementById('input'),q=i.value.trim();if(!q)return;i.value='';i.style.height='28px';if(typeof ask==='function')ask(q);">➤</button>
+          <button id="btn-send" class="send-btn" title="전송 (Enter)" onclick="var conv=(typeof curConv==='function')?curConv():null;if(conv&&window._abortControllers&&window._abortControllers.has(conv.id)){try{window._abortControllers.get(conv.id).abort();}catch(e){}return;}var i=document.getElementById('input'),q=i.value.trim();if(!q)return;i.value='';i.style.height='28px';if(typeof ask==='function')ask(q);">➤</button>
         </div>
       </div>
       <div class="input-hint">Enter 전송 · Shift+Enter 줄바꿈 · 본 답변은 AI 참고 자료입니다 · 변호사 상담 권고</div>
@@ -510,11 +512,12 @@ async function lawSearch(target, query, display=10) {
   } catch (e) { return { error: e.message, results: [] }; }
 }
 
-async function claudeCall(messages, system, model="claude-opus-4-7", max_tokens=8192, onDelta=null) {
+async function claudeCall(messages, system, model="claude-opus-4-7", max_tokens=8192, onDelta=null, signal=null) {
   const stream = !!onDelta;
   const r = await fetch("/api/chat", {
     method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ model, max_tokens, system, messages, stream })
+    body: JSON.stringify({ model, max_tokens, system, messages, stream }),
+    signal
   });
   if (!r.ok) throw new Error("API " + r.status + ": " + (await r.text()).slice(0,200));
   if (!stream) {
@@ -583,7 +586,7 @@ async function grokCall(messages, system, max_tokens=400) {
 }
 
 // ============ 4-Pass Pipeline ============
-async function runPipeline(question, progress, onMainStart, onMainDelta, deepThink) {
+async function runPipeline(question, progress, onMainStart, onMainDelta, deepThink, signal) {
   // === 근원적 속도 개선: Opus 답변 즉시 시작, 분류·검색은 백그라운드 ===
   progress("답변 생성 중...");
   const intent = { domain: "기타", keywords: [question.slice(0, 50)], original: question };
@@ -638,7 +641,8 @@ async function runPipeline(question, progress, onMainStart, onMainDelta, deepThi
     mainSys,
     "claude-opus-4-7",
     8192,
-    onMainDelta  // streaming
+    onMainDelta,  // streaming
+    signal        // abort
   );
 
   return {
@@ -974,6 +978,7 @@ function renderHistory() {
       state.currentId = el.dataset.id;
       localStorage.setItem(KEYS.cur, state.currentId);
       renderMessages(); renderHistory();
+      if (typeof window.updateSendButton === "function") window.updateSendButton();
     });
   });
   $h.querySelectorAll("[data-del]").forEach(b => {
@@ -1000,8 +1005,12 @@ async function ask(question) {
   if (!window._busyConvs) window._busyConvs = new Set();
   if (window._busyConvs.has(conv.id)) return;
   window._busyConvs.add(conv.id);
+  // 중단 가능하도록 AbortController per-conv
+  if (!window._abortControllers) window._abortControllers = new Map();
+  const abortCtrl = new AbortController();
+  window._abortControllers.set(conv.id, abortCtrl);
   state.busy = true;
-  document.getElementById("btn-send").disabled = true;
+  if (typeof window.updateSendButton === "function") window.updateSendButton();
   conv.messages.push({ role: "user", content: question });
   if (conv.title === "새 대화") conv.title = question.slice(0,24);
   // 진행 메시지 + 스트리밍 카드 placeholder
@@ -1084,7 +1093,7 @@ async function ask(question) {
   };
 
   try {
-    const card = await runPipeline(question, progress, onMainStart, onMainDelta, deepThink);
+    const card = await runPipeline(question, progress, onMainStart, onMainDelta, deepThink, abortCtrl.signal);
     // 최종 카드 갱신 (citations + grade 등)
     if (streamCard) {
       Object.assign(streamCard.card, card);
@@ -1106,22 +1115,52 @@ async function ask(question) {
 
   } catch (e) {
     conv.messages = conv.messages.filter(m => m.role !== "progress");
-    conv.messages.push({ role: "error", content: "처리 실패: " + e.message + "\n\n[해결] CORS 에러 시 우측 상단 ⚙ → 'CORS 프록시' 활성화." });
+    if (e.name === "AbortError" || /aborted|abort/i.test(e.message || "")) {
+      // 사용자가 중단한 경우 — 부분 답변 유지 + "(중단됨)" 마킹
+      if (streamCard) {
+        streamCard.streaming = false;
+        streamCard.card.aborted = true;
+        if (streamCard.card.answer_md) {
+          streamCard.card.answer_md = streamCard.card.answer_md + "\n\n_— 사용자가 중단함_";
+        } else {
+          streamCard.card.answer_md = "_— 사용자가 중단함_";
+        }
+      }
+    } else {
+      conv.messages.push({ role: "error", content: "처리 실패: " + e.message });
+    }
   }
   setConvs(state.conversations);
-  // 이 대화의 busy 만 해제 (다른 대화는 계속 진행 중일 수 있음)
+  // 이 대화의 busy 해제 + AbortController 정리
   if (window._busyConvs) window._busyConvs.delete(conv.id);
+  if (window._abortControllers) window._abortControllers.delete(conv.id);
   // 현재 보고 있는 대화가 더 이상 busy 아니면 send 버튼 활성화
   if (curConv()?.id === conv.id || !window._busyConvs?.has(curConv()?.id)) {
     state.busy = false;
-    const $s = document.getElementById("btn-send");
-    if ($s) $s.disabled = false;
   }
+  if (typeof window.updateSendButton === "function") window.updateSendButton();
   renderMessages();
 }
 
 // ============ Events ============
 // (btn-send / input 의 click·keydown·input 핸들러는 HTML inline onclick/onkeydown/oninput 로 처리됨 — 중복 등록 방지)
+
+// === send / stop 버튼 토글 ===
+window.updateSendButton = function() {
+  const $btn = document.getElementById("btn-send");
+  if (!$btn) return;
+  const conv = (typeof curConv === "function") ? curConv() : null;
+  const busy = conv && window._busyConvs && window._busyConvs.has(conv.id);
+  if (busy) {
+    $btn.textContent = "■";
+    $btn.title = "중단";
+    $btn.classList.add("stop-mode");
+  } else {
+    $btn.textContent = "➤";
+    $btn.title = "전송 (Enter)";
+    $btn.classList.remove("stop-mode");
+  }
+};
 window.copyMessage = function(btn) {
   const wrap = btn.closest('.message');
   if (!wrap) return;
@@ -1159,6 +1198,7 @@ window.newChat = function() {
   const $dtToggle = document.getElementById("deepthink-toggle");
   if ($dtCb) $dtCb.checked = false;
   if ($dtToggle) $dtToggle.classList.remove("on");
+  if (typeof window.updateSendButton === "function") window.updateSendButton();
   // 빈 "새 대화" 중복 방지: 현재 대화가 비어있으면 재사용
   const current = curConv();
   if (current && current.messages.length === 0) {
