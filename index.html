@@ -1060,7 +1060,8 @@ const $dtToggle = document.getElementById("deepthink-toggle");
 if ($dtCb && $dtToggle) {
   const syncDt = () => $dtToggle.classList.toggle("on", $dtCb.checked);
   $dtCb.addEventListener("change", syncDt);
-  $dtToggle.addEventListener("click", () => requestAnimationFrame(syncDt));
+  $dtToggle.addEventListener("click", () => setTimeout(syncDt, 0));
+  $dtToggle.addEventListener("mouseup", () => setTimeout(syncDt, 0));
   syncDt();
 }
 
