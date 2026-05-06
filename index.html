@@ -1,0 +1,1037 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5">
+<meta name="theme-color" content="#1E3A8A">
+<title>똑똑</title>
+<style>
+:root {
+  --bg: #F8FAFC;
+  --panel: #FFFFFF;
+  --border: #E2E8F0;
+  --text: #0F172A;
+  --text-mute: #64748B;
+  --primary: #1E3A8A;
+  --primary-hover: #1E40AF;
+  --user-bubble: #1E3A8A;
+  --user-text: #FFFFFF;
+  --card-bg: #FFFFFF;
+  --warn-bg: #FEF3C7;
+  --warn-text: #92400E;
+  --warn-border: #FCD34D;
+  --grade-a: #D1FAE5;
+  --grade-a-text: #065F46;
+  --grade-b: #FEF3C7;
+  --grade-b-text: #92400E;
+  --grade-c: #FEE2E2;
+  --grade-c-text: #991B1B;
+  --link: #1E40AF;
+  --chip-bg: #DBEAFE;
+  --chip-text: #1E40AF;
+  --case-bg: #FEF3C7;
+  --case-text: #92400E;
+  --shadow: 0 1px 2px rgba(0,0,0,0.04);
+}
+[data-theme="dark"] {
+  --bg: #0F172A; --panel: #1E293B; --border: #334155; --text: #F1F5F9;
+  --text-mute: #94A3B8; --primary: #3B82F6; --primary-hover: #60A5FA;
+  --user-bubble: #3B82F6; --card-bg: #1E293B;
+  --warn-bg: #422006; --warn-text: #FCD34D; --warn-border: #B45309;
+  --grade-a: #064E3B; --grade-a-text: #6EE7B7;
+  --grade-b: #422006; --grade-b-text: #FCD34D;
+  --grade-c: #450A0A; --grade-c-text: #FCA5A5;
+  --link: #60A5FA; --chip-bg: #1E3A8A; --chip-text: #BFDBFE;
+  --case-bg: #422006; --case-text: #FCD34D;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
+  background: var(--bg); color: var(--text); height: 100vh; overflow: hidden;
+}
+.app { display: grid; grid-template-columns: 280px 1fr; grid-template-rows: 56px 1fr; height: 100vh; }
+.header {
+  grid-column: 1 / 3; display: flex; align-items: center; justify-content: flex-start;
+  padding: 0 20px; background: var(--primary); color: white; box-shadow: var(--shadow); z-index: 10;
+}
+.header .logo { font-weight: 700; font-size: 18px; letter-spacing: -0.3px; }
+.header .logo .sub { font-weight: 400; font-size: 12px; opacity: 0.8; margin-left: 8px; }
+.header .actions { display: flex; gap: 8px; }
+.header button {
+  background: rgba(255,255,255,0.15); color: white; border: 0;
+  padding: 6px 12px; border-radius: 6px; font-size: 13px; cursor: pointer;
+}
+.header button:hover { background: rgba(255,255,255,0.25); }
+.sidebar { background: var(--panel); border-right: 1px solid var(--border); overflow-y: auto; padding: 16px; }
+.sidebar h3 {
+  font-size: 11px; font-weight: 600; color: var(--text-mute);
+  text-transform: uppercase; letter-spacing: 0.5px; margin: 16px 0 8px;
+}
+.sidebar h3:first-child { margin-top: 0; }
+.new-chat {
+  width: 100%; background: var(--primary); color: white; border: 0;
+  padding: 10px; border-radius: 6px; font-size: 14px; font-weight: 500;
+  cursor: pointer; margin-bottom: 12px;
+}
+.new-chat:hover { background: var(--primary-hover); }
+.history-item {
+  padding: 8px 10px; border-radius: 6px; cursor: pointer; font-size: 13px;
+  margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  display: flex; justify-content: space-between; align-items: center; gap: 4px;
+}
+.history-item:hover { background: var(--bg); }
+.history-item.active { background: var(--chip-bg); color: var(--chip-text); font-weight: 500; }
+.history-item .delete {
+  opacity: 0; background: transparent; border: 0; color: inherit;
+  cursor: pointer; font-size: 14px; padding: 0 4px;
+}
+.history-item:hover .delete { opacity: 0.7; }
+.history-item .delete:hover { opacity: 1; }
+
+
+.related-laws .law-chip {
+  font-size: 12px; padding: 6px 8px; background: var(--chip-bg);
+  border-radius: 4px; margin-bottom: 4px; color: var(--chip-text); cursor: pointer;
+}
+.chat-area { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
+.messages { flex: 1; overflow-y: auto; padding: 24px max(20px, 12%); scroll-behavior: smooth; }
+.message { margin-bottom: 28px; }
+.message.user .bubble {
+  background: var(--user-bubble); color: var(--user-text);
+  padding: 12px 16px; border-radius: 12px 12px 2px 12px; max-width: 80%;
+  margin-left: auto; font-size: 14px; line-height: 1.5; word-break: break-word;
+}
+.answer-card {
+  background: var(--card-bg); border: 1px solid var(--border);
+  border-radius: 12px; padding: 24px; margin-top: 8px; box-shadow: var(--shadow);
+}
+.answer-card h2:first-child {
+  font-size: 16px; font-weight: 700; margin-bottom: 12px;
+  padding-bottom: 8px; border-bottom: 2px solid var(--chip-bg);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  letter-spacing: -0.3px;
+}
+.answer-card h2 {
+  font-size: 16px; font-weight: 700; color: var(--text); margin: 16px 0 8px;
+}
+.answer-card h3 {
+  font-size: 14px; font-weight: 600; color: var(--primary);
+  margin: 14px 0 6px; display: flex; align-items: center; gap: 8px;
+}
+.answer-card h3::before {
+  content: ""; display: inline-block; width: 4px; height: 14px;
+  background: var(--primary); border-radius: 2px;
+}
+.answer-card p, .answer-card li { font-size: 14px; line-height: 1.7; color: var(--text); }
+.answer-card ul { margin-left: 20px; margin-top: 4px; }
+.answer-card a { color: var(--link); text-decoration: underline; text-underline-offset: 2px; }
+
+/* §TABLE-ALL-CELLS-CENTER + §TABLE-CELL-SINGLE-LINE-PRIORITY */
+.answer-card table {
+  width: 100%; border-collapse: collapse; margin: 8px 0;
+  font-size: 13px; table-layout: auto;
+}
+.answer-card table th, .answer-card table td {
+  border: 1px solid var(--border); padding: 6px 8px;
+  vertical-align: middle; text-align: center; word-break: keep-all;
+}
+.answer-card table th:not(:last-child),
+.answer-card table td:not(:last-child) { white-space: nowrap; }
+.answer-card table th:last-child,
+.answer-card table td:last-child { white-space: normal; word-break: keep-all; }
+.answer-card table th { background: var(--chip-bg); color: var(--chip-text); font-weight: 700; }
+.answer-card table tr:nth-child(even) td { background: var(--bg); }
+
+.amendment-warning {
+  background: var(--warn-bg); border-left: 4px solid var(--warn-border);
+  padding: 10px 14px; border-radius: 4px; font-size: 13px;
+  color: var(--warn-text); margin: 12px 0;
+}
+.dissent {
+  background: var(--bg); border-left: 4px solid var(--text-mute);
+  padding: 10px 14px; border-radius: 4px; margin: 12px 0;
+}
+.dissent .label {
+  font-size: 11px; font-weight: 600; color: var(--text-mute);
+  text-transform: uppercase; margin-bottom: 4px;
+}
+.sources {
+  background: var(--bg); padding: 12px 14px;
+  border-radius: 6px; margin-top: 16px;
+}
+.sources .label {
+  font-size: 11px; font-weight: 600; color: var(--text-mute);
+  text-transform: uppercase; margin-bottom: 6px; letter-spacing: 0.5px;
+}
+.sources ul { list-style: none; margin: 0; padding: 0; }
+.sources li { font-size: 12px; padding: 3px 0; }
+.sources li::before { content: "·"; margin-right: 6px; color: var(--text-mute); }
+.confidence-row {
+  display: flex; align-items: center; gap: 8px; margin-top: 12px;
+  font-size: 12px; flex-wrap: wrap;
+}
+.badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 4px 10px; border-radius: 999px; font-weight: 600; font-size: 12px;
+}
+.badge.A { background: var(--grade-a); color: var(--grade-a-text); }
+.badge.B { background: var(--grade-b); color: var(--grade-b-text); }
+.badge.C { background: var(--grade-c); color: var(--grade-c-text); }
+.disclaimer {
+  background: var(--warn-bg); border: 1px solid var(--warn-border);
+  border-radius: 6px; padding: 12px 14px; margin-top: 16px;
+  font-size: 12px; line-height: 1.6; color: var(--warn-text);
+}
+.disclaimer .label { font-weight: 700; margin-bottom: 4px; }
+.progress {
+  padding: 12px 16px; background: var(--chip-bg); border-radius: 8px;
+  margin-top: 8px; font-size: 13px; color: var(--chip-text);
+  display: flex; align-items: center; gap: 10px;
+}
+.spinner {
+  width: 14px; height: 14px; border: 2px solid var(--border);
+  border-top-color: var(--primary); border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.input-area {
+  padding: 16px max(20px, 12%); background: var(--panel);
+  border-top: 1px solid var(--border);
+}
+.input-row { display: flex; gap: 8px; }
+.input-row textarea {
+  flex: 1; padding: 12px 14px; font-size: 14px;
+  border: 1px solid var(--border); border-radius: 8px;
+  resize: none; font-family: inherit;
+  min-height: 44px; max-height: 120px; outline: none;
+  background: var(--bg); color: var(--text);
+}
+.input-row textarea:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(30,58,138,0.15);
+}
+.input-row .send-btn {
+  background: var(--primary); color: white; border: 0;
+  width: 44px; height: 44px; min-width: 44px;
+  border-radius: 10px; font-size: 18px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: background 0.15s, transform 0.1s;
+  padding: 0;
+}
+.input-row .send-btn:hover:not(:disabled) {
+  background: var(--primary-hover); transform: translateY(-1px);
+}
+.input-row .send-btn:active:not(:disabled) { transform: translateY(0); }
+.input-row .send-btn:disabled { background: var(--text-mute); cursor: not-allowed; transform: none; }
+.input-hint {
+  font-size: 11px; color: var(--text-mute); margin-top: 6px; text-align: right;
+}
+.empty-state { text-align: center; padding: 60px 20px; color: var(--text-mute); }
+.empty-state h1 {
+  font-size: 22px; color: var(--primary); margin-bottom: 8px;
+  font-weight: 700; white-space: nowrap; overflow: hidden;
+}
+.empty-state p { font-size: 14px; margin-bottom: 20px; }
+.suggestion-chips {
+  display: flex; flex-wrap: wrap; gap: 8px;
+  justify-content: center; max-width: 700px; margin: 0 auto;
+}
+.suggestion-chip {
+  padding: 8px 14px; background: var(--panel);
+  border: 1px solid var(--border); border-radius: 20px;
+  font-size: 13px; color: var(--text); cursor: pointer;
+}
+.suggestion-chip:hover { border-color: var(--primary); color: var(--primary); }
+.law-link, .case-link {
+  display: inline-block; padding: 1px 6px;
+  border-radius: 4px; font-size: 13px; text-decoration: none;
+}
+.law-link { background: var(--chip-bg); color: var(--chip-text); }
+.case-link { background: var(--case-bg); color: var(--case-text); }
+.settings-modal {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+  display: none; align-items: center; justify-content: center; z-index: 100;
+}
+.settings-modal.open { display: flex; }
+.settings-panel {
+  background: var(--panel); padding: 24px; border-radius: 12px;
+  max-width: 500px; width: 90%; max-height: 80vh; overflow-y: auto;
+}
+.settings-panel h2 { color: var(--text); margin-bottom: 16px; font-size: 18px; }
+.settings-panel label {
+  display: block; margin: 12px 0 4px;
+  font-size: 13px; font-weight: 500;
+}
+.settings-panel input {
+  width: 100%; padding: 8px 10px;
+  border: 1px solid var(--border); border-radius: 6px;
+  font-size: 13px; background: var(--bg); color: var(--text);
+  font-family: monospace;
+}
+.settings-panel .row {
+  display: flex; gap: 8px; margin-top: 16px; justify-content: flex-end;
+}
+.settings-panel button {
+  padding: 8px 16px; border: 0; border-radius: 6px;
+  font-size: 13px; cursor: pointer;
+}
+.settings-panel .btn-save { background: var(--primary); color: white; }
+.settings-panel .btn-cancel {
+  background: var(--bg); color: var(--text); border: 1px solid var(--border);
+}
+
+@media (max-width: 768px) {
+  .app { grid-template-columns: 0 1fr; }
+  .sidebar { display: none; }
+  .messages, .input-area { padding-left: 12px; padding-right: 12px; }
+  .header .logo .sub { display: none; }
+  .empty-state h1 { font-size: 18px; white-space: normal; }
+}
+
+
+  .answer-card, table, blockquote { page-break-inside: avoid; }
+  h1,h2,h3,h4 { page-break-after: avoid; }
+  .header,.sidebar,.input-area,.actions { display: none !important; }
+  .chat-area, .messages { padding: 0 !important; }
+}
+
+/* === 애니메이션 === */
+.message { animation: fadeIn 0.3s ease-out; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+.streaming-cursor::after {
+  content: "▍"; color: var(--primary); animation: blink 1s steps(2) infinite;
+  font-weight: 100; margin-left: 1px;
+}
+@keyframes blink { 50% { opacity: 0; } }
+
+/* === 딥씽크 토글 === */
+.deepthink-toggle {
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 44px; padding: 0 14px; margin-right: 0;
+  cursor: pointer; border-radius: 10px;
+  background: var(--primary); border: 1px solid var(--primary);
+  color: white; font-size: 13px; font-weight: 500;
+  user-select: none; transition: all 0.15s; white-space: nowrap;
+  opacity: 0.55;
+}
+.deepthink-toggle:hover { opacity: 0.8; }
+.deepthink-toggle.on { opacity: 1; box-shadow: 0 0 0 2px rgba(30,58,138,0.25); }
+.deepthink-toggle input { display: none; }
+.input-row { gap: 8px; align-items: flex-end; }
+
+/* === 사고 과정 패널 === */
+.reasoning-panel {
+  margin: 12px 0; border: 1px solid var(--border); border-radius: 8px;
+  background: var(--bg); overflow: hidden;
+}
+.reasoning-panel summary {
+  padding: 10px 14px; cursor: pointer; font-size: 13px;
+  color: var(--text-mute); user-select: none; list-style: none;
+}
+.reasoning-panel summary::-webkit-details-marker { display: none; }
+.reasoning-panel summary::before {
+  content: "▶"; display: inline-block; margin-right: 8px;
+  transition: transform 0.2s; font-size: 10px;
+}
+.reasoning-panel[open] summary::before { transform: rotate(90deg); }
+.reasoning-panel .reasoning-body {
+  padding: 12px 14px; border-top: 1px solid var(--border);
+  font-size: 12px; line-height: 1.6; color: var(--text-mute);
+  white-space: pre-wrap; max-height: 400px; overflow-y: auto;
+}
+
+</style>
+</head>
+<body data-theme="light">
+<div class="app">
+  <header class="header">
+    <div class="logo">똑똑</div>
+    
+  </header>
+  <aside class="sidebar">
+    <button class="new-chat" id="btn-new-chat">+ 새 대화</button>
+    <h3>이전 대화</h3>
+    <div id="history-list"></div>
+    <div id="related-laws-panel" style="display:none;">
+      <h3>관련 법령</h3>
+      <div class="related-laws" id="related-laws"></div>
+    </div>
+    
+  </aside>
+  <main class="chat-area">
+    <div class="messages" id="messages"></div>
+    <div class="input-area">
+      <div class="input-row" style="align-items:flex-end;">
+        <label class="deepthink-toggle" id="deepthink-toggle" title="DeepSeek-reasoner로 깊이 분석 (느리지만 정밀)">
+          <input type="checkbox" id="deepthink-cb">
+          <span>🧠 깊이 분석</span>
+        </label>
+        <textarea id="input" placeholder="법률 질문을 입력하세요. 예) 근로기준법상 연차휴가는 어떻게 발생하나요?" rows="1"></textarea>
+        <button id="btn-send" class="send-btn" title="전송 (Enter)">➤</button>
+      </div>
+      <div class="input-hint">Enter 전송 · Shift+Enter 줄바꿈 · 본 답변은 AI 참고 자료입니다 · 변호사 상담 권고</div>
+    </div>
+  </main>
+</div>
+
+<div class="settings-modal" id="settings-modal">
+  <div class="settings-panel">
+    <h2>API 키 입력</h2>
+    <p style="font-size:12px;color:var(--text-mute);margin-bottom:8px;">
+      한국 법률 질문에 답변합니다. 사용 전 API 키 1개 이상 입력이 필요합니다.<br><span style="color:var(--text-mute);font-size:11px;">키는 브라우저에만 저장되며 외부로 전송되지 않습니다.</span>
+    </p>
+    <label>Anthropic Claude API Key (필수)</label>
+    <input type="password" id="set-anthropic" placeholder="sk-ant-...">
+    <label>DeepSeek API Key (선택)</label>
+    <input type="password" id="set-deepseek" placeholder="sk-...">
+    <label>Grok API Key (선택)</label>
+    <input type="password" id="set-grok" placeholder="xai-...">
+    <label>국가법령정보 OC (이메일 ID)</label>
+    <input type="text" id="set-law-oc" placeholder="kibie">
+    <label><input type="checkbox" id="set-cors-proxy"> CORS 프록시 사용</label>
+    <p style="font-size:11px;color:var(--text-mute);margin-top:4px;">
+      브라우저에서 CORS 에러 시 활성화. 키가 corsproxy.io를 거치게 됨.
+    </p>
+    <div class="row">
+      <button class="btn-cancel" id="btn-cancel">취소</button>
+      <button class="btn-save" id="btn-save">저장</button>
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+// ============ Storage ============
+const KEYS = {
+  conv: "law_ai_conversations_v2",
+  cur: "law_ai_current",
+  api: "law_ai_api_keys",
+  theme: "law_ai_theme",
+};
+const DEFAULT_KEYS = { anthropic:"", deepseek:"", grok:"", lawOC:"", corsProxy:false };
+const getKeys = () => {
+  try { return { ...DEFAULT_KEYS, ...(JSON.parse(localStorage.getItem(KEYS.api))||{}) }; }
+  catch { return { ...DEFAULT_KEYS }; }
+};
+const setKeys = k => localStorage.setItem(KEYS.api, JSON.stringify(k));
+const getConvs = () => { try { return JSON.parse(localStorage.getItem(KEYS.conv))||[]; } catch { return []; } };
+const setConvs = c => localStorage.setItem(KEYS.conv, JSON.stringify(c));
+
+const DISCLAIMER = "본 분석은 AI 기반 참고 자료이며 법적 효력이 없습니다. 구체적 사안에 대한 법률 자문은 반드시 변호사와 상담하시기 바랍니다. 인용된 법령·판례는 작성 시점 기준이며 이후 개정·변경 가능성이 있습니다.";
+
+// ============ State ============
+const state = {
+  conversations: getConvs(),
+  currentId: localStorage.getItem(KEYS.cur),
+  busy: false,
+};
+// === 첫 로드: 빈 대화 1개만 보장 + 중복 제거 ===
+// 1) 모든 빈 대화를 1개만 남기고 정리
+const _emptyConvs = state.conversations.filter(c => c.messages.length === 0);
+if (_emptyConvs.length > 1) {
+  const keep = _emptyConvs[0];
+  state.conversations = state.conversations.filter(c => c.messages.length > 0 || c.id === keep.id);
+}
+// 2) 현재 ID 유효성 + 환영 메시지 우선
+let _curConv = state.conversations.find(c => c.id === state.currentId);
+if (!_curConv || _curConv.messages.length > 0) {
+  // 빈 대화가 이미 있으면 그쪽으로
+  const _hasEmpty = state.conversations.find(c => c.messages.length === 0);
+  if (_hasEmpty) {
+    state.currentId = _hasEmpty.id;
+  } else {
+    // 정말로 빈 대화가 하나도 없을 때만 새로 생성
+    const c = { id: "c_"+Date.now(), title: "새 대화", messages: [], createdAt: new Date().toISOString() };
+    state.conversations.unshift(c);
+    state.currentId = c.id;
+  }
+  setConvs(state.conversations);
+  localStorage.setItem(KEYS.cur, state.currentId);
+}
+const curConv = () => state.conversations.find(c => c.id === state.currentId);
+
+// 라이트 테마 고정
+document.body.setAttribute("data-theme", "light");
+
+// ============ API ============
+const corsWrap = url => getKeys().corsProxy ? "https://corsproxy.io/?"+encodeURIComponent(url) : url;
+
+async function lawSearch(target, query, display=10) {
+  try {
+    const r = await fetch("/api/lawsearch", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ target, query, display })
+    });
+    if (!r.ok) return { error: "search "+r.status, results: [] };
+    const data = await r.json();
+    if (data.error) return { error: data.error, results: [] };
+    return { ok: true, raw: data };
+  } catch (e) {
+    return { error: e.message, results: [] };
+  }
+}
+
+async function claudeCall(messages, system, model="claude-opus-4-6", max_tokens=4096, onDelta=null) {
+  const stream = !!onDelta;
+  const r = await fetch("/api/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ model, max_tokens, system, messages, temperature: 0.2, stream })
+  });
+  if (!r.ok) throw new Error("API " + r.status + ": " + (await r.text()).slice(0,200));
+  if (!stream) {
+    const d = await r.json();
+    const text = d.content.filter(b => b.type === "text").map(b => b.text).join("");
+    return { content: text, usage: d.usage };
+  }
+  // Streaming SSE
+  const reader = r.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = "", text = "", usage = {};
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    const lines = buf.split("\n");
+    buf = lines.pop() || "";
+    for (const line of lines) {
+      if (!line.startsWith("data: ")) continue;
+      const payload = line.slice(6).trim();
+      if (!payload || payload === "[DONE]") continue;
+      try {
+        const ev = JSON.parse(payload);
+        if (ev.type === "content_block_delta" && ev.delta?.type === "text_delta") {
+          text += ev.delta.text;
+          onDelta(ev.delta.text, text);
+        } else if (ev.type === "message_delta" && ev.usage) {
+          usage = { ...usage, ...ev.usage };
+        } else if (ev.type === "message_start" && ev.message?.usage) {
+          usage = { ...ev.message.usage };
+        }
+      } catch {}
+    }
+  }
+  return { content: text, usage };
+}
+
+async function deepseekCall(messages, system, max_tokens=1200) {
+  // 백그라운드 검증 전용 — content는 messages[-1].content에서 추출
+  const content = messages[messages.length-1]?.content || "";
+  try {
+    const r = await fetch("/api/verify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content })
+    });
+    if (!r.ok) return { content: "(검증 실패)", error: true };
+    return await r.json();
+  } catch (e) {
+    return { content: "(검증 실패: "+e.message+")", error: true };
+  }
+}
+
+async function deepSeekReasonerCall(question) {
+  try {
+    const r = await fetch("/api/reasoner", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ question })
+    });
+    if (!r.ok) return { content: "", reasoning: "(분석 실패)", error: true };
+    return await r.json();
+  } catch (e) {
+    return { content: "", reasoning: "(분석 실패: "+e.message+")", error: true };
+  }
+}
+
+async function grokCall(messages, system, max_tokens=400) {
+  const content = messages[messages.length-1]?.content || "";
+  try {
+    const r = await fetch("/api/cross", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content })
+    });
+    if (!r.ok) return { content: "(교차 실패)", error: true };
+    return await r.json();
+  } catch (e) {
+    return { content: "(교차 실패: "+e.message+")", error: true };
+  }
+}
+
+// ============ 4-Pass Pipeline ============
+async function runPipeline(question, progress, onMainStart, onMainDelta, deepThink) {
+  // === 근원적 속도 개선: Opus 답변 즉시 시작, 분류·검색은 백그라운드 ===
+  progress("답변 생성 중...");
+  const intent = { domain: "기타", keywords: [question.slice(0, 50)], original: question };
+
+  // 분류·검색 백그라운드 (사이드바만 갱신, 메인 답변 차단 안 함)
+  (async () => {
+    try {
+      const realIntent = await classifyQuestion(question);
+      const bundle = await searchLegalDB(realIntent);
+      if (typeof window.updateRelatedLaws === "function") {
+        window.updateRelatedLaws(bundle);
+      }
+    } catch (e) {
+      console.warn("background classify+search failed:", e);
+    }
+  })();
+
+  // Opus 메인 답변 — 검색 결과 없이 바로 (사용자 질문만으로)
+  if (typeof onMainStart === "function") onMainStart(intent);
+  const mainSys = `한국 법률 전문가. 정확한 법령·판례 인용. 단정형 금지. 구조: ## 핵심 결론 / ## 법적 지위 분류표 / ## 적용 법령 / ## 관련 판례 / ## 반론·소수의견 / ## 실무 권고. 반드시 실재 사건번호만. 마지막 GRADE: A|B|C.`;
+  const main = await claudeCall(
+    [{role:"user", content: question}],
+    mainSys,
+    "claude-opus-4-6",
+    4096,
+    onMainDelta  // streaming
+  );
+
+  return {
+    answer_md: main.content,
+    intent,
+    bundle: null,
+    confidence_grade: extractGrade(main.content),
+    verified_citations: extractCitations(main.content),
+    timestamp: new Date().toISOString(),
+    disclaimer: DISCLAIMER,
+    deepThink: !!deepThink,
+  };
+}
+
+// === 백그라운드 검증 (답변 표시 후) ===
+async function runVerification(card, question, deepThink) {
+  const tasks = [
+    deepseekCall(
+      [{role:"user", content: `다음 답변의 논리 결함·인용 오류 점검 (300토큰):\n${card.answer_md.slice(0,2500)}`}],
+      "한국 법률 검증자. 간결."
+    ).catch(e => ({content: "(검증 실패: "+e.message+")", error: true})),
+    grokCall(
+      [{role:"user", content: `검증 (200토큰):\n${card.answer_md.slice(0,1200)}`}],
+      "한국 법률 교차검증자. 200토큰 한국어."
+    ).catch(e => ({content: "(교차 실패: "+e.message+")", error: true}))
+  ];
+  // 딥씽크 추가
+  if (deepThink) {
+    tasks.push(
+      deepSeekReasonerCall(question).catch(e => ({content: "", reasoning: "(분석 실패: "+e.message+")", error: true}))
+    );
+  }
+  const results = await Promise.all(tasks);
+  return {
+    verify_text: results[0]?.content || "",
+    cross_text: results[1]?.content || "",
+    deepthink_reasoning: deepThink ? (results[2]?.reasoning || "") : "",
+    deepthink_content: deepThink ? (results[2]?.content || "") : "",
+  };
+}
+
+async function classifyQuestion(q) {
+  try {
+    const r = await fetch("/api/classify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ question: q })
+    });
+    if (!r.ok) return { domain: "기타", keywords: [q.slice(0,20)] };
+    const d = await r.json();
+    const m = d.content?.match(/\{[\s\S]*\}/);
+    return m ? JSON.parse(m[0]) : { domain: "기타", keywords: [q.slice(0,20)] };
+  } catch (e) {
+    return { domain: "기타", keywords: [q.slice(0,20)], _error: e.message };
+  }
+}
+
+async function searchLegalDB(intent) {
+  const query = (intent.keywords || []).join(" ").trim() || intent.original || "";
+  if (!query) return { laws: [], cases: [], note: "no keywords" };
+  const [laws, cases] = await Promise.all([
+    lawSearch("law", query, 5),
+    lawSearch("prec", query, 5)
+  ]);
+  return { laws, cases, query };
+}
+
+function extractGrade(text) {
+  const m = text.match(/GRADE:\s*([A-Z][+]?)/i);
+  return m ? m[1].toUpperCase() : "B";
+}
+
+function extractCitations(text) {
+  const cases = [...text.matchAll(/\b(\d{2,4}\s*(?:헌가|헌나|헌마|헌바|다|도|두)\s*\d{1,6})\b/g)].map(m => ({
+    raw: m[1].replace(/\s/g,""), type: "prec",
+    url: "https://www.law.go.kr/lsSc.do?query=" + encodeURIComponent(m[1])
+  }));
+  const laws = [...text.matchAll(/([가-힣]+(?:법|령|규칙))\s*제(\d+)조/g)].map(m => ({
+    raw: `${m[1]} 제${m[2]}조`, type: "law",
+    url: "https://www.law.go.kr/lsSc.do?query=" + encodeURIComponent(m[1])
+  }));
+  // dedupe
+  const seen = new Set();
+  return [...laws, ...cases].filter(c => {
+    if (seen.has(c.raw)) return false;
+    seen.add(c.raw); return true;
+  });
+}
+
+// ============ Render ============
+const escapeHtml = s => String(s||"").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
+
+function md2html(md) {
+  if (!md) return "";
+  let h = md;
+  // tables
+  h = h.replace(/((?:^\|.*\|.*\n)+)/gm, m => {
+    const rows = m.trim().split("\n").map(r => r.replace(/^\|/,"").replace(/\|$/,"").split("|").map(c=>c.trim()));
+    if (rows.length < 2) return m;
+    const isAlign = rows[1].every(c => /^:?-+:?$/.test(c));
+    const head = isAlign ? rows[0] : null;
+    const body = isAlign ? rows.slice(2) : rows;
+    let html = "<table>";
+    if (head) html += "<thead><tr>" + head.map(c => "<th>"+escapeHtml(c)+"</th>").join("") + "</tr></thead>";
+    html += "<tbody>" + body.map(r => "<tr>" + r.map(c => "<td>"+escapeHtml(c)+"</td>").join("") + "</tr>").join("") + "</tbody></table>";
+    return html;
+  });
+  // headings
+  h = h.replace(/^### (.+)$/gm, '<h3>$1</h3>');
+  h = h.replace(/^## (.+)$/gm, '<h2>$1</h2>');
+  h = h.replace(/^# (.+)$/gm, '<h2>$1</h2>');
+  // bold
+  h = h.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+  // bullets
+  h = h.replace(/^[-*]\s+(.+)$/gm, '<li>$1</li>');
+  h = h.replace(/(<li>(?:.|\n)+?<\/li>)(?=\n\n|\n[^<]|\n$|$)/g, '<ul>$1</ul>');
+  // blockquote
+  h = h.replace(/^> (.+)$/gm, '<blockquote>$1</blockquote>');
+  // paragraphs (after block elements)
+  h = h.split(/\n\n+/).map(p => {
+    if (/^<(h[1-6]|table|ul|ol|blockquote|pre)/.test(p.trim())) return p;
+    return "<p>" + p.replace(/\n/g,"<br>") + "</p>";
+  }).join("\n");
+  return h;
+}
+
+function renderMessages() {
+  const $m = document.getElementById("messages");
+  const conv = curConv();
+  if (!conv || conv.messages.length === 0) {
+    $m.innerHTML = `
+      <div class="welcome-message" style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; min-height: 60vh; color: #666; text-align: center; padding: 40px 20px;">
+        <h2 style="font-size: 28px; color: #1a3a6c; margin-bottom: 12px; font-weight: 700;">법률 전문 도우미 똑똑 입니다</h2>
+        <p style="color: #888; font-size: 14px;">법률 질문을 입력해 주세요</p>
+      </div>
+    `;
+    
+    return;
+  }
+  $m.innerHTML = "";
+  for (const msg of conv.messages) {
+    if (msg.role === "user") {
+      $m.insertAdjacentHTML("beforeend", `<div class="message user"><div class="bubble">${escapeHtml(msg.content)}</div></div>`);
+    } else if (msg.role === "progress") {
+      $m.insertAdjacentHTML("beforeend", `<div class="message"><div class="progress"><div class="spinner"></div><span id="progress-text">${escapeHtml(msg.content)}</span></div></div>`);
+    } else if (msg.role === "error") {
+      $m.insertAdjacentHTML("beforeend", `<div class="message"><div class="amendment-warning">⚠ ${escapeHtml(msg.content)}</div></div>`);
+    } else if (msg.role === "assistant") {
+      const c = msg.card;
+      const isStreaming = !!msg.streaming;
+      const sourcesHtml = (c.verified_citations||[]).map(s => `<li><a href="${s.url}" target="_blank" rel="noopener">${escapeHtml(s.raw)}</a> <span style="color:var(--text-mute);font-size:11px;">(${s.type})</span></li>`).join("");
+      const verifyBlock = c.verify_text ? `<div class="dissent"><div class="label">검증</div><p>${escapeHtml(c.verify_text.slice(0,600))}</p></div>` : "";
+      const crossBlock = c.cross_text ? `<div class="dissent"><div class="label">교차 검증</div><p>${escapeHtml(c.cross_text.slice(0,600))}</p></div>` : "";
+      const reasoningBlock = c.deepthink_reasoning ?
+        `<details class="reasoning-panel"><summary>💭 깊이 분석 사고 과정 보기</summary><div class="reasoning-body">${escapeHtml(c.deepthink_reasoning)}</div></details>` : "";
+      const streamingClass = isStreaming ? " streaming-cursor" : "";
+      const bodyHtml = isStreaming
+        ? `<div class="${streamingClass}">${md2html(c.answer_md)}</div>`
+        : md2html(c.answer_md);
+      $m.insertAdjacentHTML("beforeend", `
+        <div class="message">
+          <div class="answer-card">
+            ${bodyHtml}
+            ${reasoningBlock}
+            ${verifyBlock}
+            ${crossBlock}
+            ${sourcesHtml ? `<div class="sources"><div class="label">출처 (${c.verified_citations.length}건)</div><ul>${sourcesHtml}</ul></div>` : ""}
+            ${!isStreaming ? `<div class="confidence-row">
+              <span class="badge ${c.confidence_grade}">신뢰도 ${c.confidence_grade}</span>
+              <span style="color:var(--text-mute);">${escapeHtml(c.intent?.domain||"")} · ${c.verified_citations?.length||0}건 인용</span>
+            </div>
+            <div class="disclaimer"><div class="label">⚖ 디스클레이머</div>${escapeHtml(c.disclaimer)}</div>` : ""}
+          </div>
+        </div>`);
+    }
+  }
+  $m.scrollTop = $m.scrollHeight;
+
+  // 관련 법령 사이드바
+  const lastA = [...conv.messages].reverse().find(m => m.role === "assistant");
+  const $rl = document.getElementById("related-laws");
+  if (lastA && lastA.card.verified_citations?.length) {
+    $rl.innerHTML = lastA.card.verified_citations.slice(0,8).map(c => `<div class="law-chip" onclick="window.open('${c.url}','_blank')">${escapeHtml(c.raw)}</div>`).join("");
+  } else {
+    $rl.innerHTML = '<div class="law-chip" style="opacity:0.6;">아직 없음</div>';
+  }
+}
+
+function renderHistory() {
+  const $h = document.getElementById("history-list");
+  $h.innerHTML = state.conversations.map(c => `
+    <div class="history-item ${c.id === state.currentId ? 'active' : ''}" data-id="${c.id}">
+      <span>${escapeHtml(c.title)}</span>
+      <button class="delete" data-del="${c.id}" title="삭제">×</button>
+    </div>`).join("");
+  $h.querySelectorAll(".history-item").forEach(el => {
+    el.addEventListener("click", e => {
+      if (e.target.dataset.del) return;
+      state.currentId = el.dataset.id;
+      localStorage.setItem(KEYS.cur, state.currentId);
+      renderMessages(); renderHistory();
+    });
+  });
+  $h.querySelectorAll("[data-del]").forEach(b => {
+    b.addEventListener("click", e => {
+      e.stopPropagation();
+      const id = b.dataset.del;
+      state.conversations = state.conversations.filter(c => c.id !== id);
+      if (state.conversations.length === 0) {
+        const c = { id: "c_"+Date.now(), title: "새 대화", messages: [], createdAt: new Date().toISOString() };
+        state.conversations.unshift(c);
+      }
+      if (state.currentId === id) state.currentId = state.conversations[0].id;
+      setConvs(state.conversations); localStorage.setItem(KEYS.cur, state.currentId);
+      renderHistory(); renderMessages();
+    });
+  });
+}
+
+// ============ Ask ============
+async function ask(question) {
+  if (state.busy) return;
+  state.busy = true;
+  document.getElementById("btn-send").disabled = true;
+  const conv = curConv();
+  conv.messages.push({ role: "user", content: question });
+  if (conv.title === "새 대화") conv.title = question.slice(0,24);
+  // 진행 메시지 + 스트리밍 카드 placeholder
+  const progressMsg = { role: "progress", content: "질문 분석 + 법령 검색 중..." };
+  conv.messages.push(progressMsg);
+  renderMessages(); renderHistory(); setConvs(state.conversations);
+
+  const progress = msg => {
+    const last = conv.messages[conv.messages.length - 1];
+    if (last && last.role === "progress") last.content = msg;
+    const $pt = document.getElementById("progress-text");
+    if ($pt) $pt.textContent = msg;
+  };
+
+  const deepThink = document.getElementById("deepthink-cb")?.checked || false;
+
+  // 스트리밍 시 카드 즉시 생성 + delta마다 업데이트
+  let streamCard = null;
+  const onMainStart = (intent) => {
+    // progress 제거하고 빈 카드 생성
+    conv.messages = conv.messages.filter(m => m.role !== "progress");
+    streamCard = {
+      role: "assistant",
+      streaming: true,
+      card: {
+        answer_md: "",
+        intent: intent,
+        verified_citations: [],
+        confidence_grade: "B",
+        disclaimer: DISCLAIMER,
+        timestamp: new Date().toISOString(),
+        deepThink: deepThink,
+      }
+    };
+    conv.messages.push(streamCard);
+    renderMessages();
+  };
+  const onMainDelta = (delta, full) => {
+    if (!streamCard) return;
+    streamCard.card.answer_md = full;
+    // 효율 위해 매 50자마다만 렌더 — 너무 자주 렌더하면 깜빡임
+    if (full.length % 30 < 5) renderMessages();
+  };
+
+  try {
+    const card = await runPipeline(question, progress, onMainStart, onMainDelta, deepThink);
+    // 최종 카드 갱신 (citations + grade 등)
+    if (streamCard) {
+      Object.assign(streamCard.card, card);
+      streamCard.streaming = false;
+    } else {
+      conv.messages = conv.messages.filter(m => m.role !== "progress");
+      conv.messages.push({ role: "assistant", card, timestamp: new Date().toISOString() });
+    }
+    setConvs(state.conversations);
+    renderMessages();
+
+    // === 백그라운드 검증 (답변 표시 후) ===
+    runVerification(streamCard?.card || card, question, deepThink).then(verifyResult => {
+      const target = streamCard?.card || card;
+      Object.assign(target, verifyResult);
+      setConvs(state.conversations);
+      renderMessages();
+    }).catch(e => console.error("verification failed:", e));
+
+  } catch (e) {
+    conv.messages = conv.messages.filter(m => m.role !== "progress");
+    conv.messages.push({ role: "error", content: "처리 실패: " + e.message + "\n\n[해결] CORS 에러 시 우측 상단 ⚙ → 'CORS 프록시' 활성화." });
+  }
+  setConvs(state.conversations);
+  state.busy = false;
+  document.getElementById("btn-send").disabled = false;
+  renderMessages();
+}
+
+// ============ Events ============
+document.getElementById("btn-send").addEventListener("click", () => {
+  const $i = document.getElementById("input");
+  const q = $i.value.trim();
+  if (!q) return;
+  $i.value = "";
+  $i.style.height = "44px";
+  ask(q);
+});
+document.getElementById("input").addEventListener("keydown", e => {
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    document.getElementById("btn-send").click();
+  }
+});
+document.getElementById("input").addEventListener("input", e => {
+  e.target.style.height = "44px";
+  e.target.style.height = Math.min(e.target.scrollHeight, 120) + "px";
+});
+document.getElementById("btn-new-chat").addEventListener("click", () => {
+  // 빈 "새 대화" 중복 방지: 현재 대화에 메시지 없으면 재사용
+  const current = curConv();
+  if (current && current.messages.length === 0) {
+    renderMessages();
+    return;
+  }
+  const c = { id: "c_"+Date.now(), title: "새 대화", messages: [], createdAt: new Date().toISOString() };
+  state.conversations.unshift(c);
+  state.currentId = c.id;
+  setConvs(state.conversations);
+  localStorage.setItem(KEYS.cur, state.currentId);
+  renderMessages(); renderHistory();
+});
+document.getElementById("btn-theme").addEventListener("click", () => {
+  const cur = document.body.getAttribute("data-theme") || "light";
+  const next = cur === "light" ? "dark" : "light";
+  document.body.setAttribute("data-theme", next);
+  localStorage.setItem(KEYS.theme, next);
+  document.getElementById("btn-theme").textContent = next === "light" ? "🌙" : "☀";
+});
+document.getElementById("btn-export").addEventListener("click", () => window.print());
+document.getElementById("btn-settings").addEventListener("click", () => {
+  const k = getKeys();
+  document.getElementById("set-anthropic").value = k.anthropic || "";
+  document.getElementById("set-deepseek").value = k.deepseek || "";
+  document.getElementById("set-grok").value = k.grok || "";
+  document.getElementById("set-law-oc").value = k.lawOC || "";
+  document.getElementById("set-cors-proxy").checked = !!k.corsProxy;
+  document.getElementById("settings-modal").classList.add("open");
+});
+document.getElementById("btn-cancel").addEventListener("click", () => {
+  document.getElementById("settings-modal").classList.remove("open");
+});
+document.getElementById("btn-save").addEventListener("click", () => {
+  setKeys({
+    anthropic: document.getElementById("set-anthropic").value.trim(),
+    deepseek: document.getElementById("set-deepseek").value.trim(),
+    grok: document.getElementById("set-grok").value.trim(),
+    lawOC: document.getElementById("set-law-oc").value.trim(),
+    corsProxy: document.getElementById("set-cors-proxy").checked,
+  });
+  document.getElementById("settings-modal").classList.remove("open");
+  alert("저장 완료. 다음 요청부터 적용됩니다.");
+});
+
+// === 첫 실행 시 API 키 모달 자동 표시 ===
+(function() {
+  const k = getKeys();
+  if (!k.anthropic) {
+    setTimeout(() => {
+      document.getElementById("set-anthropic").value = "";
+      document.getElementById("set-deepseek").value = k.deepseek || "";
+      document.getElementById("set-grok").value = k.grok || "";
+      document.getElementById("set-law-oc").value = k.lawOC || "kibie";
+      document.getElementById("set-cors-proxy").checked = !!k.corsProxy;
+      document.getElementById("settings-modal").classList.add("open");
+    }, 200);
+  }
+})();
+
+
+
+
+// === 관련 법령 사이드바 즉시 갱신 (Stage 2 결과) ===
+window.updateRelatedLaws = function(bundle) {
+  const $panel = document.getElementById("related-laws-panel");
+  const $rl = document.getElementById("related-laws");
+  if (!$panel || !$rl) return;
+  const items = [];
+  // 다양한 응답 구조 대응
+  const lawsRaw = bundle?.laws?.raw || bundle?.laws;
+  const casesRaw = bundle?.cases?.raw || bundle?.cases;
+  // law.go.kr LawSearch
+  const tryLaws = lawsRaw?.LawSearch?.law || lawsRaw?.law || [];
+  const lawArr = Array.isArray(tryLaws) ? tryLaws : (tryLaws ? [tryLaws] : []);
+  lawArr.slice(0,5).forEach(l => {
+    const title = l.법령명한글 || l.법령명 || l.title;
+    if (!title) return;
+    const link = l.법령상세링크 ? "https://www.law.go.kr"+l.법령상세링크 :
+      "https://www.law.go.kr/lsSc.do?query="+encodeURIComponent(title);
+    items.push({ raw: title.slice(0,28), url: link });
+  });
+  // 판례
+  const tryPrecs = casesRaw?.PrecSearch?.prec || casesRaw?.prec || [];
+  const precArr = Array.isArray(tryPrecs) ? tryPrecs : (tryPrecs ? [tryPrecs] : []);
+  precArr.slice(0,5).forEach(p => {
+    const title = p.사건명 || p.사건번호 || p.title;
+    if (!title) return;
+    const link = p.판례상세링크 ? "https://www.law.go.kr"+p.판례상세링크 :
+      "https://www.law.go.kr/precSc.do?query="+encodeURIComponent(p.사건번호||title);
+    items.push({ raw: title.slice(0,28), url: link });
+  });
+  if (items.length) {
+    $rl.innerHTML = items.map(c =>
+      `<div class="law-chip" onclick="window.open('${c.url}','_blank')" style="cursor:pointer">${escapeHtml(c.raw)}</div>`
+    ).join("");
+    $panel.style.display = "block";
+  } else {
+    $panel.style.display = "none";
+  }
+};
+
+
+// 딥씽크 토글 시각 효과
+const $dtCb = document.getElementById("deepthink-cb");
+const $dtToggle = document.getElementById("deepthink-toggle");
+if ($dtCb && $dtToggle) {
+  $dtCb.addEventListener("change", () => {
+    $dtToggle.classList.toggle("on", $dtCb.checked);
+  });
+}
+
+
+
+renderHistory();
+renderMessages();
+
+// DOMContentLoaded 보강 — 환영 메시지 즉시 표시
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", () => { renderMessages(); renderHistory(); });
+} else {
+  setTimeout(() => { renderMessages(); }, 0);
+}
+</script>
+</body>
+</html>

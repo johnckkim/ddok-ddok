@@ -1,0 +1,10 @@
+{
+  "name": "law-skill",
+  "version": "2.2.0",
+  "description": "한국 법률 분석 채팅 (Vercel Edge Functions)",
+  "private": true,
+  "scripts": {
+    "dev": "vercel dev",
+    "deploy": "vercel --prod"
+  }
+}
