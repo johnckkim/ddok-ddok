@@ -363,7 +363,7 @@ body {
     
   </aside>
   <main class="chat-area">
-    <div class="messages" id="messages"><div class="welcome-message" style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;min-height:60vh;color:#666;text-align:center;padding:40px 20px;"><p style="color:#1a3a6c;font-size:18px;font-weight:600;margin-bottom:24px;">경현님 안녕하세요</p><h2 style="font-size:28px;color:#1a3a6c;margin-bottom:8px;font-weight:700;">법률 전문 도우미 똑똑 입니다</h2><p style="color:#888;font-size:14px;">질문을 입력해 주세요</p></div></div>
+    <div class="messages" id="messages"><div class="welcome-message" style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;min-height:60vh;color:#666;text-align:center;padding:40px 20px;"><p style="color:#1a3a6c;font-size:27px;font-weight:600;margin-bottom:28px;">경현님 안녕하세요</p><h2 style="font-size:28px;color:#1a3a6c;font-weight:700;">법률 전문 도우미 똑똑 입니다</h2></div></div>
     <div class="input-area">
       <div class="input-row" style="align-items:flex-end;">
         <label class="deepthink-toggle" id="deepthink-toggle" onclick="var l=this;setTimeout(function(){l.classList.toggle('on',document.getElementById('deepthink-cb').checked)},0)">
@@ -759,9 +759,8 @@ function renderMessages() {
   if (!conv || conv.messages.length === 0) {
     $m.innerHTML = `
       <div class="welcome-message" style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;min-height:60vh;color:#666;text-align:center;padding:40px 20px;">
-        <p style="color:#1a3a6c;font-size:18px;font-weight:600;margin-bottom:24px;">경현님 안녕하세요</p>
-        <h2 style="font-size:28px;color:#1a3a6c;margin-bottom:8px;font-weight:700;">법률 전문 도우미 똑똑 입니다</h2>
-        <p style="color:#888;font-size:14px;">질문을 입력해 주세요</p>
+        <p style="color:#1a3a6c;font-size:27px;font-weight:600;margin-bottom:28px;">경현님 안녕하세요</p>
+        <h2 style="font-size:28px;color:#1a3a6c;font-weight:700;">법률 전문 도우미 똑똑 입니다</h2>
       </div>
     `;
     return;
@@ -890,20 +889,28 @@ async function ask(question) {
     conv.messages.push(streamCard);
     renderMessages();
   };
+  // === 부드러운 타이핑 효과: 80ms 단위 throttle (~12fps), 마지막 값만 렌더 ===
+  let _streamPending = false;
+  let _streamLatest = "";
+  const flushStream = () => {
+    _streamPending = false;
+    const $body = document.getElementById("_streaming_body");
+    if ($body) {
+      $body.innerHTML = md2html(_streamLatest);
+      const $msgs = document.getElementById("messages");
+      if ($msgs) $msgs.scrollTop = $msgs.scrollHeight;
+    } else {
+      // 스트리밍 카드 DOM 미존재 → 전체 렌더 후 다음 frame부터 in-place
+      renderMessages();
+    }
+  };
   const onMainDelta = (delta, full) => {
     if (!streamCard) return;
     streamCard.card.answer_md = full;
-    // 깜빡임 제거: 스트리밍 카드 본문만 in-place 갱신 (전체 renderMessages 호출 X)
-    const $body = document.getElementById("_streaming_body");
-    if ($body) {
-      $body.innerHTML = md2html(full);
-      // 스크롤 자동 따라가기
-      const $msgs = document.getElementById("messages");
-      if ($msgs) $msgs.scrollTop = $msgs.scrollHeight;
-    } else if (full.length % 60 < 5) {
-      // 스트리밍 카드가 아직 DOM에 없는 경우만 fallback으로 전체 렌더
-      renderMessages();
-    }
+    _streamLatest = full;
+    if (_streamPending) return; // 이미 다음 flush 예약됨
+    _streamPending = true;
+    setTimeout(flushStream, 80);
   };
 
   try {
