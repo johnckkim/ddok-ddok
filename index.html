@@ -1057,13 +1057,21 @@ window.updateRelatedLaws = function(bundle) {
 // 딥씽크 토글 시각 효과
 const $dtCb = document.getElementById("deepthink-cb");
 const $dtToggle = document.getElementById("deepthink-toggle");
-if ($dtCb && $dtToggle) {
-  const syncDt = () => $dtToggle.classList.toggle("on", $dtCb.checked);
-  $dtCb.addEventListener("change", syncDt);
-  $dtToggle.addEventListener("click", () => setTimeout(syncDt, 0));
-  $dtToggle.addEventListener("mouseup", () => setTimeout(syncDt, 0));
-  syncDt();
-}
+// document-level delegation — survives DOM re-renders
+const _syncDt = () => {
+  const t = document.getElementById("deepthink-toggle");
+  const c = document.getElementById("deepthink-cb");
+  if (t && c) t.classList.toggle("on", c.checked);
+};
+document.addEventListener("click", (e) => {
+  if (e.target.closest && e.target.closest("#deepthink-toggle")) {
+    setTimeout(_syncDt, 0);
+  }
+});
+document.addEventListener("change", (e) => {
+  if (e.target && e.target.id === "deepthink-cb") _syncDt();
+});
+_syncDt();
 
 
 
