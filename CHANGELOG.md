@@ -81,6 +81,7 @@
 - ✨ **`da23ef4` 답변 중단 기능** — `AbortController` per-conv + 진행 중에는 send 버튼이 빨간 ■ stop 버튼으로 변신, 클릭 시 즉시 중단 + "사용자가 중단함" 마킹
 - ✨ **`ef0456c` 모바일 반응형 완성** — 햄버거 메뉴(☰) + 사이드바 슬라이드인 오버레이 + 백드롭 + iOS zoom 방지(font-size 16px) + 환영 메시지·답변 카드·input padding 축소
 - 🐛 `8dbff3b` `sidebar-backdrop` 기본 `display:none` 미디어 쿼리 밖으로 — PC grid 레이아웃 붕괴 fix
+- 🐛 **`805c5a7` 옛 btn-theme/settings/cancel/save handler 삭제** — element 미존재 상태에서 `null.addEventListener` 에러 던지며 그 이후 JS(window.copyMessage, newChat, toggleSidebar 등) 등록 일부 누락 가능성 차단
 
 ---
 
