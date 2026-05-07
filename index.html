@@ -504,7 +504,7 @@ body {
     <div class="input-area">
       <div class="input-box">
         <div class="attachment-chips" id="attachment-chips" style="display:none;"></div>
-        <textarea id="input" placeholder="법률 질문을 입력하세요. 예) 근로기준법상 연차휴가는 어떻게 발생하나요?" rows="1" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();document.getElementById('btn-send').click();}" oninput="this.style.height='28px';this.style.height=Math.min(this.scrollHeight,200)+'px';"></textarea>
+        <textarea id="input" placeholder="" rows="1" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();document.getElementById('btn-send').click();}" oninput="this.style.height='28px';this.style.height=Math.min(this.scrollHeight,200)+'px';"></textarea>
         <div class="input-actions">
           <button id="btn-attach" class="attach-btn" type="button" title="파일 첨부 (이미지·PDF·텍스트, 드래그도 가능)" onclick="document.getElementById('file-input').click();">＋</button>
           <input type="file" id="file-input" multiple accept="image/*,.pdf,.txt,.md,.csv,.json,.html,.log,.js,.py,.java,.ts,.tsx,.jsx,.css,.xml,.yaml,.yml,.sh,.c,.cpp,.h,.go,.rb,.rs,.php,.sql,.toml,.ini" style="display:none;" onchange="if(typeof window._addFiles==='function')window._addFiles(this.files);this.value='';">

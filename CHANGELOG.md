@@ -94,6 +94,7 @@
   - Claude API multipart content 변환 — 이미지·PDF는 base64 block, 텍스트는 question에 인라인
   - localStorage quota 보호 — 저장 시 base64 data 필드 strip (id/name/size/kind/mediaType만 유지)
   - 사용자 메시지 카드에 첨부 미리보기 칩 표시 (history 재방문 시도 그대로)
+- 🎨 textarea placeholder 문구 제거 (`법률 질문을 입력하세요. 예) ...` → 빈 값) (2026-05-07)
 
 ---
 
