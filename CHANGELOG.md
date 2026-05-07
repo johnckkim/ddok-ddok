@@ -84,6 +84,16 @@
 - 🐛 **`805c5a7` 옛 btn-theme/settings/cancel/save handler 삭제** — element 미존재 상태에서 `null.addEventListener` 에러 던지며 그 이후 JS(window.copyMessage, newChat, toggleSidebar 등) 등록 일부 누락 가능성 차단
 - 🐛 **모바일 메인창 백지 fix** — 모바일에서 `.sidebar`가 `position:fixed`로 빠지면 `.chat-area`가 grid 자동 배치 규칙에 따라 0px 컬럼(1열)에 들어가 메인 콘텐츠가 사라지던 버그. `.app { grid-template-columns: 1fr }` + `.chat-area { grid-column: 1/2; grid-row: 2/3 }`로 명시 고정 (2026-05-07)
 - 🐛 **모바일 입력창 잘림 fix** — `.app { height: 100vh }`가 모바일 주소창 영역까지 포함해 화면 밖으로 밀렸음. `100dvh`로 보정 + `.input-area`에 `env(safe-area-inset-bottom)` 패딩 추가 (2026-05-07)
+- ✨ **파일 첨부 기능** (2026-05-07)
+  - input-actions 좌측에 ＋ 버튼 추가 (deepthink 토글 옆)
+  - 드래그 앤 드롭 지원 — 화면 어디든 파일 끌면 풀스크린 dashed overlay 표시 + 놓으면 첨부
+  - 클립보드 붙여넣기 (Ctrl+V) 로 이미지 첨부 가능
+  - 지원 형식: 이미지(jpg/png/gif/webp ≤5MB) · PDF(≤10MB) · 텍스트(txt/md/csv/json/code 등 ≤1MB)
+  - 미지원: hwp/docx/xlsx — 안내 alert + PDF 변환 권고
+  - textarea 위에 첨부 칩 표시 (아이콘 + 파일명 + 크기 + × 삭제)
+  - Claude API multipart content 변환 — 이미지·PDF는 base64 block, 텍스트는 question에 인라인
+  - localStorage quota 보호 — 저장 시 base64 data 필드 strip (id/name/size/kind/mediaType만 유지)
+  - 사용자 메시지 카드에 첨부 미리보기 칩 표시 (history 재방문 시도 그대로)
 
 ---
 

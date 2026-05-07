@@ -254,6 +254,49 @@ body {
 /* deepthink toggle을 input-actions 내부 크기에 맞춤 */
 .input-actions .deepthink-toggle { height: 34px; padding: 0 14px; font-size: 12.5px; border-radius: 17px; gap: 0; }
 .input-actions .deepthink-toggle span { display: inline-block; text-align: center; line-height: 1; }
+/* 파일 첨부 + 버튼 */
+.input-actions .attach-btn {
+  background: transparent; color: var(--text-mute); border: 1.5px solid var(--border);
+  width: 34px; height: 34px; min-width: 34px;
+  border-radius: 50%; cursor: pointer;
+  font-size: 22px; line-height: 1; font-weight: 300;
+  display: flex; align-items: center; justify-content: center;
+  padding: 0; transition: all 0.15s;
+}
+.input-actions .attach-btn:hover { background: var(--bg); color: var(--text); border-color: var(--text-mute); }
+/* 첨부 파일 칩 영역 */
+.attachment-chips {
+  display: flex; flex-wrap: wrap; gap: 6px; padding: 0 0 4px 0;
+}
+.attachment-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 6px 4px 10px;
+  background: var(--chip-bg); color: var(--chip-text);
+  border-radius: 12px; font-size: 12px;
+  max-width: 220px;
+}
+.attachment-chip .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 130px; }
+.attachment-chip .size { color: var(--text-mute); font-size: 11px; }
+.attachment-chip .x {
+  background: transparent; border: 0; color: inherit; cursor: pointer;
+  font-size: 16px; padding: 0 2px; line-height: 1; opacity: 0.55;
+  width: 18px; height: 18px; display:inline-flex; align-items:center; justify-content:center;
+}
+.attachment-chip .x:hover { opacity: 1; }
+/* 사용자 메시지 안의 첨부 미리보기 */
+.message.user .user-attachments {
+  display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; justify-content: flex-end;
+}
+.message.user .user-attachments .attachment-chip { background: rgba(30,58,138,0.08); color: var(--primary); }
+/* 드래그 오버레이 */
+.drag-overlay {
+  position: fixed; inset: 0; z-index: 1000;
+  background: rgba(30, 58, 138, 0.18);
+  border: 4px dashed var(--primary);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 22px; color: var(--primary); font-weight: 600;
+  pointer-events: none;
+}
 .input-hint {
   font-size: 11px; color: var(--text-mute); margin-top: 6px; text-align: right;
 }
@@ -367,6 +410,10 @@ body {
   /* 깊이 분석 토글 작게 */
   .input-actions .deepthink-toggle { height: 32px; padding: 0 10px; font-size: 11.5px; }
   .input-actions .send-btn { width: 32px; height: 32px; min-width: 32px; }
+  .input-actions .attach-btn { width: 32px; height: 32px; min-width: 32px; font-size: 20px; }
+  .attachment-chip { font-size: 11.5px; max-width: 170px; }
+  .attachment-chip .name { max-width: 100px; }
+  .drag-overlay { font-size: 16px; }
 
   /* hint 한 줄로 */
   .input-hint { font-size: 10px; }
@@ -456,13 +503,16 @@ body {
     <div class="messages" id="messages"><div class="welcome-message" style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;min-height:60vh;color:#666;text-align:center;padding:40px 20px;"><p style="color:#1a3a6c;font-size:27px;font-weight:600;margin-bottom:8px;">경현님 안녕하세요</p><h2 style="font-size:56px;color:#1a3a6c;font-weight:700;letter-spacing:-1px;">법률 전문 도우미 똑똑 입니다</h2></div></div>
     <div class="input-area">
       <div class="input-box">
+        <div class="attachment-chips" id="attachment-chips" style="display:none;"></div>
         <textarea id="input" placeholder="법률 질문을 입력하세요. 예) 근로기준법상 연차휴가는 어떻게 발생하나요?" rows="1" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();document.getElementById('btn-send').click();}" oninput="this.style.height='28px';this.style.height=Math.min(this.scrollHeight,200)+'px';"></textarea>
         <div class="input-actions">
+          <button id="btn-attach" class="attach-btn" type="button" title="파일 첨부 (이미지·PDF·텍스트, 드래그도 가능)" onclick="document.getElementById('file-input').click();">＋</button>
+          <input type="file" id="file-input" multiple accept="image/*,.pdf,.txt,.md,.csv,.json,.html,.log,.js,.py,.java,.ts,.tsx,.jsx,.css,.xml,.yaml,.yml,.sh,.c,.cpp,.h,.go,.rb,.rs,.php,.sql,.toml,.ini" style="display:none;" onchange="if(typeof window._addFiles==='function')window._addFiles(this.files);this.value='';">
           <label class="deepthink-toggle" id="deepthink-toggle" onclick="var l=this;setTimeout(function(){l.classList.toggle('on',document.getElementById('deepthink-cb').checked)},0)">
             <input type="checkbox" id="deepthink-cb">
             <span>깊이 분석</span>
           </label>
-          <button id="btn-send" class="send-btn" title="전송 (Enter)" onclick="var conv=(typeof curConv==='function')?curConv():null;if(conv&&window._abortControllers&&window._abortControllers.has(conv.id)){try{window._abortControllers.get(conv.id).abort();}catch(e){}return;}var i=document.getElementById('input'),q=i.value.trim();if(!q)return;i.value='';i.style.height='28px';if(typeof ask==='function')ask(q);">➤</button>
+          <button id="btn-send" class="send-btn" title="전송 (Enter)" onclick="var conv=(typeof curConv==='function')?curConv():null;if(conv&&window._abortControllers&&window._abortControllers.has(conv.id)){try{window._abortControllers.get(conv.id).abort();}catch(e){}return;}var i=document.getElementById('input'),q=i.value.trim();if(!q&&(!window._pendingAttachments||window._pendingAttachments.length===0))return;i.value='';i.style.height='28px';if(typeof ask==='function')ask(q);">➤</button>
         </div>
       </div>
       <div class="input-hint">Enter 전송 · Shift+Enter 줄바꿈 · 본 답변은 AI 참고 자료입니다 · 변호사 상담 권고</div>
@@ -512,7 +562,23 @@ const getKeys = () => {
 };
 const setKeys = k => localStorage.setItem(KEYS.api, JSON.stringify(k));
 const getConvs = () => { try { return JSON.parse(localStorage.getItem(KEYS.conv))||[]; } catch { return []; } };
-const setConvs = c => localStorage.setItem(KEYS.conv, JSON.stringify(c));
+// 첨부 파일의 base64 data는 localStorage에 저장하지 않음 (quota 초과 방지)
+const setConvs = c => {
+  try {
+    const stripped = c.map(conv => ({
+      ...conv,
+      messages: (conv.messages || []).map(m => {
+        if (m.role === "user" && Array.isArray(m.attachments) && m.attachments.length > 0){
+          return { ...m, attachments: m.attachments.map(a => ({ id: a.id, name: a.name, size: a.size, kind: a.kind, mediaType: a.mediaType })) };
+        }
+        return m;
+      })
+    }));
+    localStorage.setItem(KEYS.conv, JSON.stringify(stripped));
+  } catch (e){
+    console.warn("setConvs storage failed:", e);
+  }
+};
 
 const DISCLAIMER = "본 분석은 AI 기반 참고 자료이며 법적 효력이 없습니다. 구체적 사안에 대한 법률 자문은 반드시 변호사와 상담하시기 바랍니다. 인용된 법령·판례는 작성 시점 기준이며 이후 개정·변경 가능성이 있습니다.";
 
@@ -640,7 +706,7 @@ async function grokCall(messages, system, max_tokens=400) {
 }
 
 // ============ 4-Pass Pipeline ============
-async function runPipeline(question, progress, onMainStart, onMainDelta, deepThink, signal) {
+async function runPipeline(question, progress, onMainStart, onMainDelta, deepThink, signal, attachments) {
   // === 근원적 속도 개선: Opus 답변 즉시 시작, 분류·검색은 백그라운드 ===
   progress("답변 생성 중...");
   const intent = { domain: "기타", keywords: [question.slice(0, 50)], original: question };
@@ -690,8 +756,11 @@ async function runPipeline(question, progress, onMainStart, onMainDelta, deepThi
 질문자가 실제로 취할 수 있는 행동 단계 (1, 2, 3 ...)
 
 마지막에 한 줄로 \`GRADE: A|B|C\` (A=확실/판례 명확, B=다수설/통설, C=다툼있음/추론).`;
+  const userContent = (typeof _buildClaudeUserContent === "function")
+    ? _buildClaudeUserContent(question, attachments)
+    : question;
   const main = await claudeCall(
-    [{role:"user", content: question}],
+    [{role:"user", content: userContent}],
     mainSys,
     "claude-opus-4-7",
     8192,
@@ -962,7 +1031,14 @@ function renderMessages() {
   for (const msg of conv.messages) {
     _msgIdx++;
     if (msg.role === "user") {
-      $m.insertAdjacentHTML("beforeend", `<div class="message user" data-msg-idx="${_msgIdx}"><div class="bubble">${escapeHtml(msg.content)}</div><button class="copy-btn" onclick="window.copyMessage(this)" title="복사">${COPY_SVG}<span>복사</span></button></div>`);
+      const atts = Array.isArray(msg.attachments) ? msg.attachments : [];
+      const attsHtml = atts.length === 0 ? "" :
+        `<div class="user-attachments">` + atts.map(a => {
+          const icon = a.kind === "image" ? "🖼" : a.kind === "document" ? "📄" : a.kind === "text" ? "📝" : "📎";
+          return `<span class="attachment-chip" title="${escapeHtml(a.name)}"><span>${icon}</span><span class="name">${escapeHtml(a.name)}</span></span>`;
+        }).join("") + `</div>`;
+      const bubbleHtml = msg.content ? `<div class="bubble">${escapeHtml(msg.content)}</div>` : "";
+      $m.insertAdjacentHTML("beforeend", `<div class="message user" data-msg-idx="${_msgIdx}">${attsHtml}${bubbleHtml}<button class="copy-btn" onclick="window.copyMessage(this)" title="복사">${COPY_SVG}<span>복사</span></button></div>`);
     } else if (msg.role === "progress") {
       $m.insertAdjacentHTML("beforeend", `<div class="message"><div class="progress"><div class="spinner"></div><span id="progress-text">${escapeHtml(msg.content)}</span></div></div>`);
     } else if (msg.role === "error") {
@@ -1051,6 +1127,137 @@ function renderHistory() {
   });
 }
 
+// ============ 파일 첨부 ============
+window._pendingAttachments = window._pendingAttachments || [];
+const TEXT_EXTS = /\.(txt|md|csv|json|html|log|js|py|java|ts|tsx|jsx|css|xml|yaml|yml|sh|c|cpp|h|go|rb|rs|php|sql|toml|ini)$/i;
+const MAX_IMG = 5 * 1024 * 1024;
+const MAX_PDF = 10 * 1024 * 1024;
+const MAX_TXT = 1 * 1024 * 1024;
+const UNSUPPORTED_HINT = " (.hwp/.docx/.xlsx 등 사무용 문서는 PDF로 변환 후 첨부)";
+function _formatSize(b){ if(b<1024)return b+"B"; if(b<1048576)return (Math.round(b/102.4)/10)+"KB"; return (Math.round(b/104857.6)/10)+"MB"; }
+function _kindIcon(k){ return k==="image"?"🖼":k==="document"?"📄":k==="text"?"📝":"⚠"; }
+function _readFileAs(file, kind){
+  return new Promise((resolve, reject)=>{
+    const r = new FileReader();
+    r.onload = ()=>resolve(r.result);
+    r.onerror = ()=>reject(r.error||new Error("read error"));
+    if (kind === "text") r.readAsText(file);
+    else r.readAsDataURL(file);
+  });
+}
+window._renderAttachmentChips = function(){
+  const $c = document.getElementById("attachment-chips");
+  if (!$c) return;
+  const list = window._pendingAttachments;
+  if (!list || list.length === 0){ $c.style.display="none"; $c.innerHTML=""; return; }
+  $c.style.display = "flex";
+  $c.innerHTML = list.map(a=>(
+    `<span class="attachment-chip" data-id="${a.id}" title="${escapeHtml(a.name)}">`
+    + `<span>${_kindIcon(a.kind)}</span>`
+    + `<span class="name">${escapeHtml(a.name)}</span>`
+    + `<span class="size">${_formatSize(a.size)}</span>`
+    + `<button type="button" class="x" onclick="window._removeAttachment('${a.id}')" aria-label="삭제">×</button>`
+    + `</span>`
+  )).join("");
+};
+window._removeAttachment = function(id){
+  window._pendingAttachments = (window._pendingAttachments||[]).filter(a=>a.id!==id);
+  window._renderAttachmentChips();
+};
+window._addFiles = async function(fileList){
+  const files = Array.from(fileList||[]);
+  for (const file of files){
+    let kind, mediaType;
+    if (file.type && file.type.startsWith("image/")){
+      if (file.size > MAX_IMG){ alert(`${file.name}: 이미지는 5MB 이하만 지원`); continue; }
+      kind = "image"; mediaType = file.type;
+    } else if (file.type === "application/pdf" || /\.pdf$/i.test(file.name)){
+      if (file.size > MAX_PDF){ alert(`${file.name}: PDF는 10MB 이하만 지원`); continue; }
+      kind = "document"; mediaType = "application/pdf";
+    } else if ((file.type && file.type.startsWith("text/")) || TEXT_EXTS.test(file.name) || file.type === "application/json"){
+      if (file.size > MAX_TXT){ alert(`${file.name}: 텍스트는 1MB 이하만 지원`); continue; }
+      kind = "text"; mediaType = "text/plain";
+    } else {
+      alert(`${file.name}: 지원하지 않는 형식${UNSUPPORTED_HINT}`);
+      continue;
+    }
+    try {
+      const data = await _readFileAs(file, kind);
+      const payload = (kind === "text") ? data : (typeof data === "string" ? data.split(",")[1] : "");
+      window._pendingAttachments.push({
+        id: "a" + Date.now() + Math.random().toString(36).slice(2,6),
+        name: file.name, size: file.size, kind, mediaType, data: payload
+      });
+    } catch (e){
+      alert(`${file.name}: 읽기 실패 — ${e.message||e}`);
+    }
+  }
+  window._renderAttachmentChips();
+};
+// === 드래그 앤 드롭 ===
+(function(){
+  let overlay = null, counter = 0;
+  function showOverlay(){
+    if (overlay) return;
+    overlay = document.createElement("div");
+    overlay.className = "drag-overlay";
+    overlay.textContent = "📎 파일을 놓으면 첨부됩니다 (이미지·PDF·텍스트)";
+    document.body.appendChild(overlay);
+  }
+  function hideOverlay(){ if (overlay){ overlay.remove(); overlay = null; } }
+  function hasFiles(e){ return e.dataTransfer && e.dataTransfer.types && Array.from(e.dataTransfer.types).includes("Files"); }
+  document.addEventListener("dragenter", function(e){
+    if (!hasFiles(e)) return;
+    e.preventDefault(); counter++; showOverlay();
+  });
+  document.addEventListener("dragover", function(e){
+    if (!hasFiles(e)) return;
+    e.preventDefault(); e.dataTransfer.dropEffect = "copy";
+  });
+  document.addEventListener("dragleave", function(e){
+    if (!hasFiles(e)) return;
+    counter--; if (counter <= 0){ counter = 0; hideOverlay(); }
+  });
+  document.addEventListener("drop", function(e){
+    if (!e.dataTransfer || !e.dataTransfer.files || e.dataTransfer.files.length === 0) return;
+    e.preventDefault(); counter = 0; hideOverlay();
+    if (typeof window._addFiles === "function") window._addFiles(e.dataTransfer.files);
+  });
+})();
+// 클립보드 이미지 붙여넣기 (Ctrl+V) 지원
+document.addEventListener("paste", function(e){
+  const items = e.clipboardData && e.clipboardData.items;
+  if (!items) return;
+  const files = [];
+  for (const it of items){
+    if (it.kind === "file"){
+      const f = it.getAsFile();
+      if (f) files.push(f);
+    }
+  }
+  if (files.length > 0 && typeof window._addFiles === "function") window._addFiles(files);
+});
+
+// 첨부를 Claude messages content array로 변환
+function _buildClaudeUserContent(question, attachments){
+  if (!attachments || attachments.length === 0) return question;
+  const blocks = [];
+  for (const a of attachments){
+    if (a.kind === "image"){
+      blocks.push({ type: "image", source: { type: "base64", media_type: a.mediaType, data: a.data } });
+    } else if (a.kind === "document"){
+      blocks.push({ type: "document", source: { type: "base64", media_type: a.mediaType, data: a.data } });
+    }
+  }
+  let textPart = question || "(첨부 파일에 대한 질문)";
+  const txtAtts = attachments.filter(a=>a.kind === "text");
+  if (txtAtts.length > 0){
+    textPart += "\n\n--- 첨부 텍스트 파일 ---\n" + txtAtts.map(a=>`\n[${a.name}]\n${a.data}\n`).join("\n");
+  }
+  blocks.push({ type: "text", text: textPart });
+  return blocks;
+}
+
 // ============ Ask ============
 async function ask(question) {
   // 같은 대화에서만 중복 ask 방지 — 다른 대화는 병렬 허용
@@ -1065,8 +1272,12 @@ async function ask(question) {
   window._abortControllers.set(conv.id, abortCtrl);
   state.busy = true;
   if (typeof window.updateSendButton === "function") window.updateSendButton();
-  conv.messages.push({ role: "user", content: question });
-  if (conv.title === "새 대화") conv.title = question.slice(0,24);
+  // 첨부 파일 캡처 후 비우기 (다음 질문에 안 섞이게)
+  const attachments = (window._pendingAttachments || []).slice();
+  window._pendingAttachments = [];
+  if (typeof window._renderAttachmentChips === "function") window._renderAttachmentChips();
+  conv.messages.push({ role: "user", content: question, attachments: attachments });
+  if (conv.title === "새 대화") conv.title = (question || (attachments[0] && attachments[0].name) || "파일 첨부").slice(0,24);
   // 진행 메시지 + 스트리밍 카드 placeholder
   const progressMsg = { role: "progress", content: "질문 분석 + 법령 검색 중..." };
   conv.messages.push(progressMsg);
@@ -1147,7 +1358,7 @@ async function ask(question) {
   };
 
   try {
-    const card = await runPipeline(question, progress, onMainStart, onMainDelta, deepThink, abortCtrl.signal);
+    const card = await runPipeline(question, progress, onMainStart, onMainDelta, deepThink, abortCtrl.signal, attachments);
     // 최종 카드 갱신 (citations + grade 등)
     if (streamCard) {
       Object.assign(streamCard.card, card);
