@@ -82,6 +82,7 @@
 - ✨ **`ef0456c` 모바일 반응형 완성** — 햄버거 메뉴(☰) + 사이드바 슬라이드인 오버레이 + 백드롭 + iOS zoom 방지(font-size 16px) + 환영 메시지·답변 카드·input padding 축소
 - 🐛 `8dbff3b` `sidebar-backdrop` 기본 `display:none` 미디어 쿼리 밖으로 — PC grid 레이아웃 붕괴 fix
 - 🐛 **`805c5a7` 옛 btn-theme/settings/cancel/save handler 삭제** — element 미존재 상태에서 `null.addEventListener` 에러 던지며 그 이후 JS(window.copyMessage, newChat, toggleSidebar 등) 등록 일부 누락 가능성 차단
+- 🐛 **모바일 메인창 백지 fix** — 모바일에서 `.sidebar`가 `position:fixed`로 빠지면 `.chat-area`가 grid 자동 배치 규칙에 따라 0px 컬럼(1열)에 들어가 메인 콘텐츠가 사라지던 버그. `.app { grid-template-columns: 1fr }` + `.chat-area { grid-column: 1/2; grid-row: 2/3 }`로 명시 고정 (2026-05-07)
 
 ---
 

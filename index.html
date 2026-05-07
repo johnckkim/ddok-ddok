@@ -323,8 +323,10 @@ body {
 
 /* === 모바일 반응형 (≤ 768px) === */
 @media (max-width: 768px) {
-  .app { grid-template-columns: 0 1fr; }
-  /* 사이드바 → 오버레이 슬라이드인 */
+  .app { grid-template-columns: 1fr; grid-template-rows: 56px 1fr; }
+  .header { grid-column: 1 / 2; }
+  .chat-area { grid-column: 1 / 2; grid-row: 2 / 3; }
+  /* 사이드바 → 오버레이 슬라이드인 (grid 흐름에서 제외) */
   .sidebar {
     position: fixed; top: 56px; left: 0;
     width: 82vw; max-width: 320px;
