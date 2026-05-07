@@ -79,6 +79,7 @@
 - 📝 `c67874a` CHANGELOG.md 추가 (Drive + dev 양쪽)
 - 🐛 `6551155` 새 대화 시 깊이 분석 토글 OFF 자동 리셋
 - ✨ **`da23ef4` 답변 중단 기능** — `AbortController` per-conv + 진행 중에는 send 버튼이 빨간 ■ stop 버튼으로 변신, 클릭 시 즉시 중단 + "사용자가 중단함" 마킹
+- ✨ **`ef0456c` 모바일 반응형 완성** — 햄버거 메뉴(☰) + 사이드바 슬라이드인 오버레이 + 백드롭 + iOS zoom 방지(font-size 16px) + 환영 메시지·답변 카드·input padding 축소
 
 ---
 
