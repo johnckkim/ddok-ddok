@@ -311,13 +311,63 @@ body {
   background: var(--bg); color: var(--text); border: 1px solid var(--border);
 }
 
+/* === 모바일 반응형 (≤ 768px) === */
 @media (max-width: 768px) {
   .app { grid-template-columns: 0 1fr; }
-  .sidebar { display: none; }
-  .messages, .input-area { padding-left: 12px; padding-right: 12px; }
+  /* 사이드바 → 오버레이 슬라이드인 */
+  .sidebar {
+    position: fixed; top: 56px; left: 0;
+    width: 82vw; max-width: 320px;
+    height: calc(100vh - 56px); height: calc(100dvh - 56px);
+    z-index: 100; transform: translateX(-100%);
+    transition: transform 0.25s ease;
+    box-shadow: 2px 0 16px rgba(0,0,0,0.15);
+    display: block;
+  }
+  .sidebar.open { transform: translateX(0); }
+  .sidebar-backdrop {
+    display: none; position: fixed; top: 56px; left: 0;
+    width: 100vw; height: calc(100vh - 56px);
+    background: rgba(0,0,0,0.35); z-index: 99;
+  }
+  .sidebar-backdrop.open { display: block; }
+  /* 햄버거 버튼 (PC 에선 숨김) */
+  .header .menu-btn { display: inline-flex !important; }
   .header .logo .sub { display: none; }
-  .empty-state h1 { font-size: 18px; white-space: normal; }
+
+  /* 메시지 영역 */
+  .messages { padding: 16px 12px; }
+  .input-area { padding: 10px 12px; }
+  .input-box { padding: 10px 12px; border-radius: 14px; }
+
+  /* 환영 메시지 — 큰 폰트 줄이기 */
+  .welcome-message p:first-child { font-size: 18px !important; margin-bottom: 6px !important; }
+  .welcome-message h2 { font-size: 28px !important; letter-spacing: -0.5px !important; }
+
+  /* 답변 카드 padding 축소 */
+  .answer-card { padding: 16px; border-radius: 10px; }
+  .answer-card h2:first-child { font-size: 15px; }
+  .answer-card h2 { font-size: 15px; }
+  .answer-card h3 { font-size: 13px; }
+  .answer-card p, .answer-card li { font-size: 13px; line-height: 1.6; }
+  .answer-card table { font-size: 12px; }
+
+  /* 사용자 버블 — 모바일에선 좀 더 넓게 */
+  .message.user .bubble { max-width: 85%; }
+
+  /* 입력 textarea */
+  .input-box textarea { font-size: 16px; /* iOS 자동 zoom 방지 */ }
+
+  /* 깊이 분석 토글 작게 */
+  .input-actions .deepthink-toggle { height: 32px; padding: 0 10px; font-size: 11.5px; }
+  .input-actions .send-btn { width: 32px; height: 32px; min-width: 32px; }
+
+  /* hint 한 줄로 */
+  .input-hint { font-size: 10px; }
 }
+
+/* PC 에선 햄버거 숨김 */
+.header .menu-btn { display: none; }
 
 @media print {
   .answer-card, table, blockquote { page-break-inside: avoid; }
@@ -385,9 +435,10 @@ body {
 <body data-theme="light">
 <div class="app">
   <header class="header">
+    <button class="menu-btn" type="button" onclick="if(typeof window.toggleSidebar==='function')window.toggleSidebar();" aria-label="메뉴" style="background:transparent;border:0;color:white;cursor:pointer;padding:0 12px 0 0;font-size:22px;align-items:center;justify-content:center;">☰</button>
     <div class="logo" style="cursor:pointer;" onclick="if(typeof window.newChat==='function')window.newChat();">똑똑</div>
-    
   </header>
+  <div class="sidebar-backdrop" onclick="if(typeof window.toggleSidebar==='function')window.toggleSidebar(false);"></div>
   <aside class="sidebar">
     <button class="new-chat" id="btn-new-chat" onclick="if(typeof window.newChat==='function')window.newChat();">+ 새 대화</button>
     <h3>이전 대화</h3>
@@ -1144,6 +1195,24 @@ async function ask(question) {
 
 // ============ Events ============
 // (btn-send / input 의 click·keydown·input 핸들러는 HTML inline onclick/onkeydown/oninput 로 처리됨 — 중복 등록 방지)
+
+// === 모바일 사이드바 토글 ===
+window.toggleSidebar = function(open) {
+  const $s = document.querySelector(".sidebar");
+  const $b = document.querySelector(".sidebar-backdrop");
+  if (!$s || !$b) return;
+  const isOpen = $s.classList.contains("open");
+  const next = (typeof open === "boolean") ? open : !isOpen;
+  $s.classList.toggle("open", next);
+  $b.classList.toggle("open", next);
+};
+// 사이드바 항목 클릭하면 자동 닫힘 (모바일)
+document.addEventListener("click", e => {
+  const item = e.target.closest(".sidebar .history-item, .sidebar .new-chat");
+  if (item && window.matchMedia("(max-width: 768px)").matches) {
+    window.toggleSidebar(false);
+  }
+});
 
 // === send / stop 버튼 토글 ===
 window.updateSendButton = function() {
