@@ -1290,52 +1290,7 @@ window.newChat = function() {
   localStorage.setItem(KEYS.cur, state.currentId);
   renderMessages(); renderHistory();
 };
-document.getElementById("btn-theme").addEventListener("click", () => {
-  const cur = document.body.getAttribute("data-theme") || "light";
-  const next = cur === "light" ? "dark" : "light";
-  document.body.setAttribute("data-theme", next);
-  localStorage.setItem(KEYS.theme, next);
-  document.getElementById("btn-theme").textContent = next === "light" ? "🌙" : "☀";
-});
-
-document.getElementById("btn-settings").addEventListener("click", () => {
-  const k = getKeys();
-  document.getElementById("set-anthropic").value = k.anthropic || "";
-  document.getElementById("set-deepseek").value = k.deepseek || "";
-  document.getElementById("set-grok").value = k.grok || "";
-  document.getElementById("set-law-oc").value = k.lawOC || "";
-  document.getElementById("set-cors-proxy").checked = !!k.corsProxy;
-  document.getElementById("settings-modal").classList.add("open");
-});
-document.getElementById("btn-cancel").addEventListener("click", () => {
-  document.getElementById("settings-modal").classList.remove("open");
-});
-document.getElementById("btn-save").addEventListener("click", () => {
-  setKeys({
-    anthropic: document.getElementById("set-anthropic").value.trim(),
-    deepseek: document.getElementById("set-deepseek").value.trim(),
-    grok: document.getElementById("set-grok").value.trim(),
-    lawOC: document.getElementById("set-law-oc").value.trim(),
-    corsProxy: document.getElementById("set-cors-proxy").checked,
-  });
-  document.getElementById("settings-modal").classList.remove("open");
-  alert("저장 완료. 다음 요청부터 적용됩니다.");
-});
-
-// === 첫 실행 시 API 키 모달 자동 표시 ===
-(function() {
-  const k = getKeys();
-  if (!k.anthropic) {
-    setTimeout(() => {
-      document.getElementById("set-anthropic").value = "";
-      document.getElementById("set-deepseek").value = k.deepseek || "";
-      document.getElementById("set-grok").value = k.grok || "";
-      document.getElementById("set-law-oc").value = k.lawOC || "";
-      document.getElementById("set-cors-proxy").checked = !!k.corsProxy;
-      document.getElementById("settings-modal").classList.add("open");
-    }, 200);
-  }
-})();
+// (옛 btn-theme/btn-settings/btn-cancel/btn-save handler + 자동 모달 — 해당 element들 제거됨, dead code 삭제)
 
 
 
