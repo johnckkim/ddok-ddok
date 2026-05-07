@@ -51,7 +51,7 @@ body {
   font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
   background: var(--bg); color: var(--text); height: 100vh; overflow: hidden;
 }
-.app { display: grid; grid-template-columns: 280px 1fr; grid-template-rows: 56px 1fr; height: 100vh; }
+.app { display: grid; grid-template-columns: 280px 1fr; grid-template-rows: 56px 1fr; height: 100vh; height: 100dvh; }
 .header {
   grid-column: 1 / 3; display: flex; align-items: center; justify-content: flex-start;
   padding: 0 20px; background: var(--primary); color: white; box-shadow: var(--shadow); z-index: 10;
@@ -343,7 +343,7 @@ body {
 
   /* 메시지 영역 */
   .messages { padding: 16px 12px; }
-  .input-area { padding: 10px 12px; }
+  .input-area { padding: 10px 12px calc(10px + env(safe-area-inset-bottom, 0px)) 12px; }
   .input-box { padding: 10px 12px; border-radius: 14px; }
 
   /* 환영 메시지 — 큰 폰트 줄이기 */
