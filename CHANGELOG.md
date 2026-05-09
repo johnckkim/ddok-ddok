@@ -95,6 +95,11 @@
   - localStorage quota 보호 — 저장 시 base64 data 필드 strip (id/name/size/kind/mediaType만 유지)
   - 사용자 메시지 카드에 첨부 미리보기 칩 표시 (history 재방문 시도 그대로)
 - 🎨 textarea placeholder 문구 제거 (`법률 질문을 입력하세요. 예) ...` → 빈 값) (2026-05-07)
+- ✨ **모바일 첨부 분기 — 카메라/갤러리/파일** (2026-05-07)
+  - 모바일(≤768px)에서 ＋ 버튼 누르면 하단 액션 시트 슬라이드업
+  - 📷 카메라 (`capture="environment"` 후면 카메라 직접) · 🖼 갤러리 (`accept="image/*"`) · 📄 파일 (전체)
+  - 백드롭 클릭 또는 취소 버튼으로 닫힘, safe-area-inset-bottom 보정
+  - PC는 분기 없이 기존대로 바로 전체 파일 다이얼로그
 
 ---
 

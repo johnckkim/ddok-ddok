@@ -297,6 +297,41 @@ body {
   font-size: 22px; color: var(--primary); font-weight: 600;
   pointer-events: none;
 }
+/* 첨부 액션 시트 (모바일 전용) */
+.attach-sheet { position: fixed; inset: 0; z-index: 1100; display: none; }
+.attach-sheet.open { display: block; }
+.attach-sheet-backdrop {
+  position: absolute; inset: 0; background: rgba(0,0,0,0.45);
+  animation: sheet-fade-in 0.18s ease;
+}
+.attach-sheet-panel {
+  position: absolute; left: 8px; right: 8px;
+  bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+  display: flex; flex-direction: column; gap: 8px;
+  animation: sheet-up 0.22s cubic-bezier(0.16,1,0.3,1);
+}
+.attach-sheet-options {
+  background: var(--panel); border-radius: 14px; overflow: hidden;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.18);
+}
+.attach-sheet-options button {
+  background: transparent; border: 0; width: 100%;
+  padding: 16px 18px; font-size: 16px; color: var(--text);
+  text-align: left; display: flex; align-items: center; gap: 14px;
+  border-bottom: 1px solid var(--border); cursor: pointer;
+}
+.attach-sheet-options button:last-child { border-bottom: 0; }
+.attach-sheet-options button:active { background: var(--bg); }
+.attach-sheet-options .ic { font-size: 22px; line-height: 1; width: 26px; text-align: center; }
+.attach-sheet-cancel {
+  background: var(--panel); border: 0; border-radius: 14px;
+  padding: 16px; font-size: 16px; font-weight: 600;
+  color: var(--primary); cursor: pointer;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.18);
+}
+.attach-sheet-cancel:active { background: var(--bg); }
+@keyframes sheet-fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes sheet-up { from { transform: translateY(110%); } to { transform: translateY(0); } }
 .input-hint {
   font-size: 11px; color: var(--text-mute); margin-top: 6px; text-align: right;
 }
@@ -506,8 +541,10 @@ body {
         <div class="attachment-chips" id="attachment-chips" style="display:none;"></div>
         <textarea id="input" placeholder="" rows="1" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();document.getElementById('btn-send').click();}" oninput="this.style.height='28px';this.style.height=Math.min(this.scrollHeight,200)+'px';"></textarea>
         <div class="input-actions">
-          <button id="btn-attach" class="attach-btn" type="button" title="파일 첨부 (이미지·PDF·텍스트, 드래그도 가능)" onclick="document.getElementById('file-input').click();">＋</button>
+          <button id="btn-attach" class="attach-btn" type="button" title="파일 첨부 (이미지·PDF·텍스트, 드래그도 가능)" onclick="if(typeof window._openAttachMenu==='function')window._openAttachMenu();else document.getElementById('file-input').click();">＋</button>
           <input type="file" id="file-input" multiple accept="image/*,.pdf,.txt,.md,.csv,.json,.html,.log,.js,.py,.java,.ts,.tsx,.jsx,.css,.xml,.yaml,.yml,.sh,.c,.cpp,.h,.go,.rb,.rs,.php,.sql,.toml,.ini" style="display:none;" onchange="if(typeof window._addFiles==='function')window._addFiles(this.files);this.value='';">
+          <input type="file" id="file-input-camera" accept="image/*" capture="environment" style="display:none;" onchange="if(typeof window._addFiles==='function')window._addFiles(this.files);this.value='';">
+          <input type="file" id="file-input-gallery" accept="image/*" multiple style="display:none;" onchange="if(typeof window._addFiles==='function')window._addFiles(this.files);this.value='';">
           <label class="deepthink-toggle" id="deepthink-toggle" onclick="var l=this;setTimeout(function(){l.classList.toggle('on',document.getElementById('deepthink-cb').checked)},0)">
             <input type="checkbox" id="deepthink-cb">
             <span>깊이 분석</span>
@@ -542,6 +579,19 @@ body {
       <button class="btn-cancel" id="btn-cancel">취소</button>
       <button class="btn-save" id="btn-save">저장</button>
     </div>
+  </div>
+</div>
+
+<!-- 모바일 전용 첨부 액션 시트 -->
+<div class="attach-sheet" id="attach-sheet" aria-hidden="true">
+  <div class="attach-sheet-backdrop" onclick="if(typeof window._closeAttachMenu==='function')window._closeAttachMenu();"></div>
+  <div class="attach-sheet-panel" role="dialog" aria-label="첨부 방법 선택">
+    <div class="attach-sheet-options">
+      <button type="button" onclick="if(typeof window._pickAttach==='function')window._pickAttach('camera');"><span class="ic">📷</span><span>카메라</span></button>
+      <button type="button" onclick="if(typeof window._pickAttach==='function')window._pickAttach('gallery');"><span class="ic">🖼</span><span>갤러리</span></button>
+      <button type="button" onclick="if(typeof window._pickAttach==='function')window._pickAttach('file');"><span class="ic">📄</span><span>파일</span></button>
+    </div>
+    <button type="button" class="attach-sheet-cancel" onclick="if(typeof window._closeAttachMenu==='function')window._closeAttachMenu();">취소</button>
   </div>
 </div>
 
@@ -1224,6 +1274,36 @@ window._addFiles = async function(fileList){
     if (typeof window._addFiles === "function") window._addFiles(e.dataTransfer.files);
   });
 })();
+// === 첨부 액션 메뉴 (모바일에서만 시트, PC는 바로 파일 다이얼로그) ===
+window._openAttachMenu = function(){
+  const isMobile = window.matchMedia && window.matchMedia("(max-width: 768px)").matches;
+  if (!isMobile){
+    document.getElementById("file-input").click();
+    return;
+  }
+  const $sheet = document.getElementById("attach-sheet");
+  if (!$sheet){ document.getElementById("file-input").click(); return; }
+  $sheet.classList.add("open");
+  $sheet.setAttribute("aria-hidden", "false");
+};
+window._closeAttachMenu = function(){
+  const $sheet = document.getElementById("attach-sheet");
+  if (!$sheet) return;
+  $sheet.classList.remove("open");
+  $sheet.setAttribute("aria-hidden", "true");
+};
+window._pickAttach = function(kind){
+  window._closeAttachMenu();
+  let id = "file-input";
+  if (kind === "camera") id = "file-input-camera";
+  else if (kind === "gallery") id = "file-input-gallery";
+  // 시트 닫힘 애니메이션 후 input 클릭 (iOS 사파리 안정성)
+  setTimeout(function(){
+    const el = document.getElementById(id);
+    if (el) el.click();
+  }, 50);
+};
+
 // 클립보드 이미지 붙여넣기 (Ctrl+V) 지원
 document.addEventListener("paste", function(e){
   const items = e.clipboardData && e.clipboardData.items;
