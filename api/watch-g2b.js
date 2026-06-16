@@ -143,6 +143,21 @@ export default async function handler(req) {
 
   const key = process.env.DATA_GO_KR_KEY;
   const webhook = process.env.SLACK_WEBHOOK_URL;
+
+  // ?test=1 → 실제 매칭 없이 Slack 연결만 점검(배포 후 원클릭 확인용)
+  if (reqUrl.searchParams.get("test") === "1") {
+    if (!webhook) {
+      return new Response(JSON.stringify({ test: true, error: "SLACK_WEBHOOK_URL 미설정" }), {
+        status: 200, headers: { "Content-Type": "application/json" } });
+    }
+    const sr = await fetch(webhook, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: ":loudspeaker: *나라장터 알림 연결 테스트* — 이 메시지가 보이면 watch-g2b Slack 연동 정상입니다 :white_check_mark:" }),
+    });
+    return new Response(JSON.stringify({ test: true, slack: { ok: sr.ok, status: sr.status } }), {
+      status: 200, headers: { "Content-Type": "application/json" } });
+  }
+
   const base = process.env.G2B_BASE_URL || "https://apis.data.go.kr/1230000/ad/BidPublicInfoService";
   const lookbackH = Number(process.env.WATCH_LOOKBACK_HOURS || 48);
   const notionToken = process.env.NOTION_TOKEN;
