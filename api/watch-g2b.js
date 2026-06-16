@@ -71,14 +71,20 @@ function extractItems(data) {
 
 async function fetchG2B(base, key, cat, term, bgn, end) {
   const qs = new URLSearchParams({
-    serviceKey: key, pageNo: "1", numOfRows: "200", type: "json",
+    serviceKey: key, pageNo: "1", numOfRows: "100", type: "json",
     inqryDiv: "1", inqryBgnDt: bgn, inqryEndDt: end, bidNtceNm: term,
   }).toString();
   const url = `${base}/${OPS[cat]}?${qs}`;
-  const r = await fetch(url, { headers: { "User-Agent": "ddok-ddok/watch-g2b" } });
-  const text = await r.text();
-  let data; try { data = JSON.parse(text); } catch { return { items: [], error: text.slice(0, 200), http: r.status }; }
-  return { items: extractItems(data) };
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 8000); // 호출당 8s 상한
+  try {
+    const r = await fetch(url, { headers: { "User-Agent": "ddok-ddok/watch-g2b" }, signal: ctrl.signal });
+    const text = await r.text();
+    let data; try { data = JSON.parse(text); } catch { return { items: [], error: text.slice(0, 200), http: r.status }; }
+    return { items: extractItems(data) };
+  } catch (e) {
+    return { items: [], error: e.name === "AbortError" ? "timeout(8s)" : e.message };
+  } finally { clearTimeout(timer); }
 }
 
 // --- Notion ---
@@ -186,19 +192,21 @@ export default async function handler(req) {
   const end = kstStamp(now);
   const bgn = kstStamp(new Date(now.getTime() - lookbackH * 3600 * 1000));
 
-  // 1) primary term × 카테고리 조회 → pool(공고번호 dedup)
+  // 1) primary term × 카테고리 조회(병렬) → pool(공고번호 dedup)
   const pool = new Map();
   const errors = [];
-  for (const term of primaries) {
-    for (const cat of cats) {
-      try {
-        const { items, error, http } = await fetchG2B(base, key, cat, term, bgn, end);
-        if (error) { errors.push({ term, cat, http, error }); continue; }
-        for (const it of items) {
-          const id = `${cat}:${it.bidNtceNo || ""}-${it.bidNtceOrd || ""}`;
-          if (!pool.has(id)) pool.set(id, { ...it, _cat: cat });
-        }
-      } catch (e) { errors.push({ term, cat, error: e.message }); }
+  const tasks = [];
+  for (const term of primaries) for (const cat of cats) tasks.push({ term, cat });
+  const results = await Promise.all(
+    tasks.map((t) => fetchG2B(base, key, t.cat, t.term, bgn, end)
+      .then((r) => ({ ...t, ...r }))
+      .catch((e) => ({ ...t, items: [], error: e.message })))
+  );
+  for (const res of results) {
+    if (res.error) { errors.push({ term: res.term, cat: res.cat, error: res.error }); continue; }
+    for (const it of res.items) {
+      const id = `${res.cat}:${it.bidNtceNo || ""}-${it.bidNtceOrd || ""}`;
+      if (!pool.has(id)) pool.set(id, { ...it, _cat: res.cat });
     }
   }
 
