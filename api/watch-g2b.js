@@ -41,8 +41,8 @@ const OPS = {
 const CAT_LABEL = { thng: "물품", servc: "용역", cnstwk: "공사", frgcpt: "외자" };
 
 const DEFAULT_KEYWORDS = [
-  "베리어프리", "대형폐기물", "키오스크", "무인배출신고시스템",
-  "베리어프리+유지보수", "대형폐기물+유지보수", "키오스크+유지보수", "무인배출신고시스템+유지보수",
+  "배리어프리", "베리어프리", "대형폐기물", "키오스크", "무인배출신고시스템",
+  "배리어프리+유지보수", "베리어프리+유지보수", "대형폐기물+유지보수", "키오스크+유지보수", "무인배출신고시스템+유지보수",
 ];
 
 // Date → KST(UTC+9) "YYYYMMDDHHmm"
@@ -71,7 +71,7 @@ function extractItems(data) {
 
 async function fetchG2B(base, key, cat, term, bgn, end) {
   const qs = new URLSearchParams({
-    serviceKey: key, pageNo: "1", numOfRows: "100", type: "json",
+    serviceKey: key, pageNo: "1", numOfRows: "300", type: "json",
     inqryDiv: "1", inqryBgnDt: bgn, inqryEndDt: end, bidNtceNm: term,
   }).toString();
   const url = `${base}/${OPS[cat]}?${qs}`;
@@ -165,7 +165,10 @@ export default async function handler(req) {
   }
 
   const base = process.env.G2B_BASE_URL || "https://apis.data.go.kr/1230000/ad/BidPublicInfoService";
-  const lookbackH = Number(process.env.WATCH_LOOKBACK_HOURS || 48);
+  // 조회 시간창: ?hours= 또는 ?days= 로 임시 override(수동 백필용), 없으면 env/기본 48h
+  const qHours = Number(reqUrl.searchParams.get("hours") || 0);
+  const qDays = Number(reqUrl.searchParams.get("days") || 0);
+  const lookbackH = qHours || (qDays ? qDays * 24 : Number(process.env.WATCH_LOOKBACK_HOURS || 48));
   const notionToken = process.env.NOTION_TOKEN;
   const notionDb = process.env.NOTION_DATABASE_ID;
   const titleProp = process.env.NOTION_TITLE_PROP || "공고명";
