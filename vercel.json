@@ -5,6 +5,9 @@
   "rewrites": [
     { "source": "/(.*)", "destination": "/index.html" }
   ],
+  "crons": [
+    { "path": "/api/watch-g2b", "schedule": "0 0 * * *" }
+  ],
   "headers": [
     {
       "source": "/(.*)",

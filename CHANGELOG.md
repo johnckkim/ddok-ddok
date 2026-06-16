@@ -10,6 +10,16 @@
 
 ---
 
+## 2026-06-16 — 나라장터 입찰공고 키워드 알림
+
+- ✨ `/api/watch-g2b` 신규 — 나라장터(조달청 입찰공고정보서비스) 키워드 모니터링 → Slack Incoming Webhook 알림
+  - 키워드×카테고리(물품/용역/공사/외자) 조회, 공고번호 dedup, 최근 N시간 게시분만(시간창 방식, 무상태 중복방지)
+  - `?dry=1` 수동 테스트, `CRON_SECRET` 헤더 검증 지원
+- 📝 `vercel.json` Cron 추가 (`0 0 * * *` = 매일 09:00 KST)
+- 📝 `.env.example`/`README` — `DATA_GO_KR_KEY`·`SLACK_WEBHOOK_URL`·`WATCH_KEYWORDS` 설정 가이드
+
+---
+
 ## 2026-05-07 — v2.3 초기 배포부터 신뢰도 평가까지
 
 ### 1. 첫 배포 + 인프라 (`8820f9d` ~ `dbf98cf`)

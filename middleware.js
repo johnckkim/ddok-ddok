@@ -5,6 +5,12 @@ export const config = {
 };
 
 export default function middleware(request) {
+  // Cron 모니터링 엔드포인트는 Basic Auth 우회 (함수 자체가 CRON_SECRET 으로 보호).
+  // Vercel Cron 요청은 Basic 자격이 없으므로 여기서 막으면 안 됨.
+  if (new URL(request.url).pathname === '/api/watch-g2b') {
+    return next();
+  }
+
   const expectedUser = process.env.SITE_USER;
   const expectedPass = process.env.SITE_PASS;
 

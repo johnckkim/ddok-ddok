@@ -97,6 +97,48 @@ vercel --prod          # 환경변수 적용 후 재배포
 - §TITLE-SINGLE-LINE
 - §LAW-DISCLAIMER
 
+## 나라장터 입찰공고 키워드 알림 (`/api/watch-g2b`)
+
+특정 키워드가 들어간 나라장터 신규 입찰공고를 매일 자동으로 찾아 Slack으로 알려줍니다.
+
+```
+Vercel Cron (매일 00:00 UTC = 09:00 KST)
+  └─ /api/watch-g2b
+       ├─ 최근 24h 게시 공고 조회 (data.go.kr 입찰공고정보서비스, bidNtceNm 키워드)
+       ├─ 물품/용역/공사/외자 4개 카테고리 × 키워드별 조회 → 공고번호로 중복 제거
+       └─ 매칭분을 Slack Incoming Webhook 으로 전송
+```
+
+### 설정 (Vercel 환경변수)
+
+| 변수 | 필수 | 설명 |
+|------|------|------|
+| `DATA_GO_KR_KEY` | ✅ | 공공데이터포털 일반 인증키(Decoding). **"조달청\_나라장터 입찰공고정보서비스" 활용신청** 필요 |
+| `SLACK_WEBHOOK_URL` | ✅ | Slack Incoming Webhook URL |
+| `WATCH_KEYWORDS` | ✅ | 쉼표로 구분한 키워드. 예: `인공지능,데이터 구축,LLM` |
+| `WATCH_CATEGORIES` | | `thng,servc,cnstwk,frgcpt` 중 선택 (기본 전체) |
+| `WATCH_LOOKBACK_HOURS` | | 조회 시간창. 기본 `24` |
+| `CRON_SECRET` | | 설정 시 Cron 요청 `Authorization` 헤더 검증 |
+
+### 준비 절차
+
+1. **공공데이터포털**: `data.go.kr` 로그인 → "조달청_나라장터 입찰공고정보서비스" 활용신청 → 인증키를 `DATA_GO_KR_KEY` 로 등록
+2. **Slack**: 워크스페이스 앱 설정 → Incoming Webhooks 활성화 → 채널 지정 → 발급된 URL을 `SLACK_WEBHOOK_URL` 로 등록
+3. **키워드**: `WATCH_KEYWORDS` 에 모니터링할 키워드 입력
+4. 재배포 → Cron이 매일 자동 실행
+
+### 동작 확인 (수동 테스트)
+
+```bash
+# Slack 전송 없이 매칭 결과만 확인
+curl "https://<배포URL>/api/watch-g2b?dry=1"
+
+# 키워드 임시 지정 테스트
+curl "https://<배포URL>/api/watch-g2b?dry=1&keywords=인공지능,데이터"
+```
+
+> ⚠️ Vercel **Hobby 플랜은 Cron 일 1회**까지만 지원합니다. 더 자주(예: 1시간마다) 돌리려면 Pro 플랜 또는 외부 스케줄러(cron-job.org 등)에서 `CRON_SECRET` 헤더와 함께 호출하세요.
+
 ## 디스클레이머
 
 본 도구의 답변은 AI 기반 참고자료이며 법적 효력이 없습니다. 구체적 사안에 대해서는 반드시 변호사와 상담하시기 바랍니다.
