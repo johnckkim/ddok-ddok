@@ -10,13 +10,16 @@
 
 ---
 
-## 2026-06-16 — 나라장터 입찰공고 키워드 알림
+## 2026-06-16 — 나라장터 입찰공고 키워드 알림 (Slack + Notion)
 
-- ✨ `/api/watch-g2b` 신규 — 나라장터(조달청 입찰공고정보서비스) 키워드 모니터링 → Slack Incoming Webhook 알림
-  - 키워드×카테고리(물품/용역/공사/외자) 조회, 공고번호 dedup, 최근 N시간 게시분만(시간창 방식, 무상태 중복방지)
-  - `?dry=1` 수동 테스트, `CRON_SECRET` 헤더 검증 지원
-- 📝 `vercel.json` Cron 추가 (`0 0 * * *` = 매일 09:00 KST)
-- 📝 `.env.example`/`README` — `DATA_GO_KR_KEY`·`SLACK_WEBHOOK_URL`·`WATCH_KEYWORDS` 설정 가이드
+- ✨ `/api/watch-g2b` 신규 — 나라장터(조달청 입찰공고정보서비스) 키워드 모니터링 → Slack + Notion
+  - 키워드×카테고리(물품/용역/공사/외자) 조회, AND 키워드(`키오스크+유지보수`) 지원
+  - Notion '나라장터' DB에 정리 + **공고번호 기반 중복판별**(하루 여러 번 실행해도 1회만 알림)
+  - Notion 미설정 시 Slack-only + 시간창 fallback
+  - `?dry=1` 수동 테스트, `CRON_SECRET` 헤더 검증
+- 📝 `vercel.json` Cron 추가 (`0 0 * * *` = 매일 09:00 KST; Pro/외부 스케줄러로 다회 실행)
+- 🔒 `middleware.js` — Cron 엔드포인트 Basic Auth 예외(함수 자체 CRON_SECRET 보호)
+- 📝 `.env.example`/`README` — data.go.kr·Slack·Notion 설정 가이드
 
 ---
 

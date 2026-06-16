@@ -99,45 +99,73 @@ vercel --prod          # 환경변수 적용 후 재배포
 
 ## 나라장터 입찰공고 키워드 알림 (`/api/watch-g2b`)
 
-특정 키워드가 들어간 나라장터 신규 입찰공고를 매일 자동으로 찾아 Slack으로 알려줍니다.
+특정 키워드가 들어간 나라장터 신규 입찰공고를 자동으로 찾아 **Slack `#나라장터` 채널**로 알리고 **Notion '나라장터' DB**에 정리합니다.
 
 ```
-Vercel Cron (매일 00:00 UTC = 09:00 KST)
+Cron / 외부 스케줄러
   └─ /api/watch-g2b
-       ├─ 최근 24h 게시 공고 조회 (data.go.kr 입찰공고정보서비스, bidNtceNm 키워드)
-       ├─ 물품/용역/공사/외자 4개 카테고리 × 키워드별 조회 → 공고번호로 중복 제거
-       └─ 매칭분을 Slack Incoming Webhook 으로 전송
+       ├─ 최근 N시간(기본 48h) 게시 공고 조회 (data.go.kr 입찰공고정보서비스, bidNtceNm)
+       ├─ 물품/용역/공사/외자 × 키워드(AND 지원) 매칭
+       ├─ Notion DB에 공고번호 존재 여부로 중복 판별 → 신규만 선별
+       └─ Notion 기록 + Slack 알림
 ```
+
+### 키워드 문법
+- 단일: `키오스크` → 공고명에 키오스크 포함
+- AND: `키오스크+유지보수` → 공고명에 키오스크 **그리고** 유지보수 모두 포함
+
+기본 키워드: `베리어프리, 대형폐기물, 키오스크, 무인배출신소시스템` + 각각의 `+유지보수` 조합.
 
 ### 설정 (Vercel 환경변수)
 
 | 변수 | 필수 | 설명 |
 |------|------|------|
-| `DATA_GO_KR_KEY` | ✅ | 공공데이터포털 일반 인증키(Decoding). **"조달청\_나라장터 입찰공고정보서비스" 활용신청** 필요 |
-| `SLACK_WEBHOOK_URL` | ✅ | Slack Incoming Webhook URL |
-| `WATCH_KEYWORDS` | ✅ | 쉼표로 구분한 키워드. 예: `인공지능,데이터 구축,LLM` |
+| `DATA_GO_KR_KEY` | ✅ | 공공데이터포털 일반 인증키(Decoding). **"나라장터 입찰공고정보서비스" 활용신청** 필요 |
+| `SLACK_WEBHOOK_URL` | ✅ | `#나라장터` 채널용 Slack Incoming Webhook URL |
+| `WATCH_KEYWORDS` | | 쉼표구분 키워드(미설정 시 기본값 사용) |
 | `WATCH_CATEGORIES` | | `thng,servc,cnstwk,frgcpt` 중 선택 (기본 전체) |
-| `WATCH_LOOKBACK_HOURS` | | 조회 시간창. 기본 `24` |
-| `CRON_SECRET` | | 설정 시 Cron 요청 `Authorization` 헤더 검증 |
+| `WATCH_LOOKBACK_HOURS` | | 조회 시간창. 기본 `48` |
+| `CRON_SECRET` | | 설정 시 요청 `Authorization` 헤더 검증 |
+| `NOTION_TOKEN` | | Notion 내부 통합 시크릿. 설정 시 정리 + **중복판별** |
+| `NOTION_DATABASE_ID` | | '나라장터' 데이터베이스 ID |
+| `NOTION_TITLE_PROP` | | title 속성명(기본 `공고명`) |
+| `NOTION_BIDNO_PROP` | | 공고번호 속성명(기본 `공고번호`, 중복판별 키) |
+
+### Notion '나라장터' DB 만들기
+1. Notion에서 새 **데이터베이스** 생성, 이름 `나라장터`
+2. 속성 구성:
+   - `공고명` (제목/Title)
+   - `공고번호` (텍스트) — 중복판별 키
+   - `카테고리` (선택/Select)
+   - `기관` (텍스트), `게시일` (텍스트), `마감일` (텍스트)
+   - `키워드` (다중 선택/Multi-select)
+   - `링크` (URL)
+3. https://www.notion.so/my-integrations → **내부 통합** 생성 → 시크릿을 `NOTION_TOKEN` 으로 등록
+4. DB 우측 `…` → **연결 추가**로 그 통합을 DB에 연결(권한 부여)
+5. DB URL의 32자리 해시를 `NOTION_DATABASE_ID` 로 등록
+
+> Notion 미설정이어도 동작합니다(이 경우 Slack만, 중복판별은 시간창 방식으로 fallback → 하루 1회 실행 권장).
 
 ### 준비 절차
-
-1. **공공데이터포털**: `data.go.kr` 로그인 → "조달청_나라장터 입찰공고정보서비스" 활용신청 → 인증키를 `DATA_GO_KR_KEY` 로 등록
-2. **Slack**: 워크스페이스 앱 설정 → Incoming Webhooks 활성화 → 채널 지정 → 발급된 URL을 `SLACK_WEBHOOK_URL` 로 등록
-3. **키워드**: `WATCH_KEYWORDS` 에 모니터링할 키워드 입력
-4. 재배포 → Cron이 매일 자동 실행
+1. **공공데이터포털**: 인증키를 `DATA_GO_KR_KEY` 로 등록
+2. **Slack**: `#나라장터` 채널 생성 → Incoming Webhook 발급 → `SLACK_WEBHOOK_URL`
+3. **Notion**: 위 DB 생성 후 `NOTION_TOKEN`/`NOTION_DATABASE_ID` 등록
+4. 재배포
 
 ### 동작 확인 (수동 테스트)
-
 ```bash
-# Slack 전송 없이 매칭 결과만 확인
+# Slack/Notion 미반영, 매칭 결과만 확인
 curl "https://<배포URL>/api/watch-g2b?dry=1"
-
-# 키워드 임시 지정 테스트
-curl "https://<배포URL>/api/watch-g2b?dry=1&keywords=인공지능,데이터"
+# 키워드 임시 지정
+curl "https://<배포URL>/api/watch-g2b?dry=1&keywords=키오스크+유지보수,대형폐기물"
 ```
 
-> ⚠️ Vercel **Hobby 플랜은 Cron 일 1회**까지만 지원합니다. 더 자주(예: 1시간마다) 돌리려면 Pro 플랜 또는 외부 스케줄러(cron-job.org 등)에서 `CRON_SECRET` 헤더와 함께 호출하세요.
+### 하루 여러 번 실행하기
+Vercel **Hobby 플랜 Cron은 일 1회**까지만 지원합니다(현재 `vercel.json`은 매일 09:00 KST 1회). 하루 여러 번 원하면:
+- **Vercel Pro**: `vercel.json`의 `crons.schedule`을 `0 */3 * * *`(3시간마다) 등으로 변경, 또는
+- **외부 스케줄러**(cron-job.org 등): 원하는 주기로 `https://<배포URL>/api/watch-g2b` 호출 (헤더 `Authorization: Bearer <CRON_SECRET>` 추가).
+
+여러 번 실행해도 **Notion 중복판별** 덕분에 같은 공고는 한 번만 알림됩니다.
 
 ## 디스클레이머
 
