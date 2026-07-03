@@ -64,7 +64,19 @@ body {
   padding: 6px 12px; border-radius: 6px; font-size: 13px; cursor: pointer;
 }
 .header button:hover { background: rgba(255,255,255,0.25); }
-.sidebar { background: var(--panel); border-right: 1px solid var(--border); overflow-y: auto; padding: 16px; }
+.sidebar { background: var(--panel); border-right: 1px solid var(--border); overflow-y: auto; padding: 16px; display: flex; flex-direction: column; }
+.sidebar #history-list { flex: 0 0 auto; }
+.sidebar-footer { margin-top: auto; padding-top: 16px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 8px; }
+.user-badge { display: flex; align-items: center; gap: 8px; padding: 8px 10px; background: var(--bg); border-radius: 8px; font-size: 13px; color: var(--text); }
+.user-badge .ic { font-size: 14px; }
+.user-badge .uname { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.logout-btn {
+  width: 100%; background: transparent; color: var(--text-mute);
+  border: 1px solid var(--border); padding: 8px 10px;
+  border-radius: 6px; font-size: 13px; cursor: pointer;
+  transition: all 0.15s;
+}
+.logout-btn:hover { background: #fee2e2; color: #dc2626; border-color: #fca5a5; }
 .sidebar h3 {
   font-size: 11px; font-weight: 600; color: var(--text-mute);
   text-transform: uppercase; letter-spacing: 0.5px; margin: 16px 0 8px;
@@ -532,7 +544,10 @@ body {
       <h3>관련 법령</h3>
       <div class="related-laws" id="related-laws"></div>
     </div>
-    
+    <div class="sidebar-footer" id="sidebar-footer">
+      <div class="user-badge" id="user-badge" style="display:none;"><span class="ic">👤</span><span class="uname" id="user-badge-name"></span></div>
+      <button type="button" class="logout-btn" onclick="if(typeof window.logout==='function')window.logout();">로그아웃</button>
+    </div>
   </aside>
   <main class="chat-area">
     <div class="messages" id="messages"><div class="welcome-message" style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;min-height:60vh;color:#666;text-align:center;padding:40px 20px;"><p id="welcome-greeting" style="color:#1a3a6c;font-size:27px;font-weight:600;margin-bottom:8px;">안녕하세요</p><h2 style="font-size:56px;color:#1a3a6c;font-weight:700;letter-spacing:-1px;">법률 전문 도우미 똑똑 입니다</h2></div></div>
@@ -1652,6 +1667,44 @@ if ($dtCb && $dtToggle) {
 
 renderHistory();
 renderMessages();
+
+// === 로그아웃 ===
+window.logout = async function(){
+  if (!confirm("로그아웃 하시겠습니까?\n(브라우저 창을 완전히 닫아야 완전히 로그아웃됩니다)")) return;
+  try {
+    // 잘못된 자격증명으로 요청해 브라우저 Basic Auth 캐시 무효화 시도
+    await fetch("/", {
+      method: "GET",
+      cache: "no-store",
+      headers: { "Authorization": "Basic " + btoa("__logout__:__logout__") }
+    });
+  } catch {}
+  // 로컬 데이터 정리 (사용자가 원하면 대화 기록은 남길 수도 있으나, 다른 사람이 볼 수 있으니 삭제 권장)
+  try {
+    localStorage.removeItem("law_ai_conversations_v2");
+    localStorage.removeItem("law_ai_current");
+  } catch {}
+  document.cookie = "ddok_user=; Path=/; Max-Age=0; SameSite=Lax";
+  window.location.replace("/logout");
+};
+// 사이드바 하단 사용자 배지 갱신
+(function fillUserBadge(){
+  function apply(){
+    const name = (typeof getUserName === "function") ? getUserName() : "";
+    const $badge = document.getElementById("user-badge");
+    const $name = document.getElementById("user-badge-name");
+    // welcome-greeting 초기 인라인 HTML도 즉시 개인화 (renderMessages 실행 전 flash 방지)
+    const $wg = document.getElementById("welcome-greeting");
+    if (name){
+      if ($badge && $name){ $name.textContent = name; $badge.style.display = "flex"; }
+      if ($wg) $wg.textContent = `${name}님 안녕하세요`;
+    } else {
+      if ($badge) $badge.style.display = "none";
+    }
+  }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", apply);
+  else apply();
+})();
 
 // DOMContentLoaded 보강 — 환영 메시지 즉시 표시
 if (document.readyState === "loading") {

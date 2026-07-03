@@ -117,6 +117,11 @@
   - 인증 성공 시 `ddok_user` 세션 쿠키(URL-encoded 이름)를 브라우저에 세팅
   - `index.html`: 쿠키에서 사용자 이름을 읽어 인사말 개인화 (`{이름}님 안녕하세요`, 없으면 "안녕하세요")
   - Cron 엔드포인트 `/api/watch-g2b`는 middleware 매처에서 제외 (CRON_SECRET 헤더로 별도 보호)
+- ✨ **로그아웃 기능** (2026-05-07)
+  - 사이드바 하단에 👤 사용자 배지 + `로그아웃` 버튼
+  - middleware `/logout` 경로: 401 + `Clear-Site-Data: "cookies","storage"` + 쿠키 삭제 + 안내 페이지
+  - JS: 잘못된 자격증명(`__logout__:__logout__`)으로 사전 fetch → 브라우저 Basic Auth 캐시 무효화 시도 + localStorage 대화 기록 삭제
+  - 완전한 로그아웃(Basic Auth 캐시 완전 제거)은 브라우저 창 종료 필요함을 안내 페이지에 명시
 - ✨ **모바일 첨부 분기 — 카메라/갤러리/파일** (2026-05-07)
   - 모바일(≤768px)에서 ＋ 버튼 누르면 하단 액션 시트 슬라이드업
   - 📷 카메라 (`capture="environment"` 후면 카메라 직접) · 🖼 갤러리 (`accept="image/*"`) · 📄 파일 (전체)
