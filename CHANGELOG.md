@@ -109,6 +109,14 @@
   - 사용자 메시지 카드에 첨부 미리보기 칩 표시 (history 재방문 시도 그대로)
 - 🎨 textarea placeholder 문구 제거 (`법률 질문을 입력하세요. 예) ...` → 빈 값) (2026-05-07)
 - 🔓 **HTTP Basic Auth 제거** — `middleware.js` 삭제, 누구나 접근 가능. `SITE_USER`/`SITE_PASS` 환경변수는 이제 미사용 (Vercel Dashboard에서 지워도 됨) (2026-05-07)
+- 🔒 **다중 사용자 로그인 + 개인화 인사말** (2026-05-07)
+  - `middleware.js` 재도입 — `SITE_USERS` 환경변수(JSON)에 여러 사용자 등록
+  - 예: `[{"id":"최종률","pw":"01088645734","name":"최종률"}, ...]`
+  - **한글 아이디 지원** — UTF-8 Basic Auth 디코딩, `charset="UTF-8"` realm
+  - 하위 호환: 기존 `SITE_USER`/`SITE_PASS` 단일 계정도 그대로 동작
+  - 인증 성공 시 `ddok_user` 세션 쿠키(URL-encoded 이름)를 브라우저에 세팅
+  - `index.html`: 쿠키에서 사용자 이름을 읽어 인사말 개인화 (`{이름}님 안녕하세요`, 없으면 "안녕하세요")
+  - Cron 엔드포인트 `/api/watch-g2b`는 middleware 매처에서 제외 (CRON_SECRET 헤더로 별도 보호)
 - ✨ **모바일 첨부 분기 — 카메라/갤러리/파일** (2026-05-07)
   - 모바일(≤768px)에서 ＋ 버튼 누르면 하단 액션 시트 슬라이드업
   - 📷 카메라 (`capture="environment"` 후면 카메라 직접) · 🖼 갤러리 (`accept="image/*"`) · 📄 파일 (전체)

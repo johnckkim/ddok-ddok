@@ -535,7 +535,7 @@ body {
     
   </aside>
   <main class="chat-area">
-    <div class="messages" id="messages"><div class="welcome-message" style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;min-height:60vh;color:#666;text-align:center;padding:40px 20px;"><p style="color:#1a3a6c;font-size:27px;font-weight:600;margin-bottom:8px;">경현님 안녕하세요</p><h2 style="font-size:56px;color:#1a3a6c;font-weight:700;letter-spacing:-1px;">법률 전문 도우미 똑똑 입니다</h2></div></div>
+    <div class="messages" id="messages"><div class="welcome-message" style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;min-height:60vh;color:#666;text-align:center;padding:40px 20px;"><p id="welcome-greeting" style="color:#1a3a6c;font-size:27px;font-weight:600;margin-bottom:8px;">안녕하세요</p><h2 style="font-size:56px;color:#1a3a6c;font-weight:700;letter-spacing:-1px;">법률 전문 도우미 똑똑 입니다</h2></div></div>
     <div class="input-area">
       <div class="input-box">
         <div class="attachment-chips" id="attachment-chips" style="display:none;"></div>
@@ -605,6 +605,15 @@ const KEYS = {
   api: "law_ai_api_keys",
   theme: "law_ai_theme",
 };
+// 로그인한 사용자 이름 — middleware가 ddok_user 쿠키로 전달 (URL-encoded UTF-8)
+function getUserName(){
+  try {
+    const m = document.cookie.match(/(?:^|;\s*)ddok_user=([^;]+)/);
+    if (m) return decodeURIComponent(m[1]);
+  } catch {}
+  return "";
+}
+function escapeHtmlAttr(s){ return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
 const DEFAULT_KEYS = { anthropic:"", deepseek:"", grok:"", lawOC:"", corsProxy:false };
 const getKeys = () => {
   try { return { ...DEFAULT_KEYS, ...(JSON.parse(localStorage.getItem(KEYS.api))||{}) }; }
@@ -1067,9 +1076,11 @@ function renderMessages() {
   const $m = document.getElementById("messages");
   const conv = curConv();
   if (!conv || conv.messages.length === 0) {
+    const _uname = (typeof getUserName === "function") ? getUserName() : "";
+    const _greet = _uname ? `${escapeHtml(_uname)}님 안녕하세요` : "안녕하세요";
     $m.innerHTML = `
       <div class="welcome-message" style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;min-height:60vh;color:#666;text-align:center;padding:40px 20px;">
-        <p style="color:#1a3a6c;font-size:27px;font-weight:600;margin-bottom:8px;">경현님 안녕하세요</p>
+        <p style="color:#1a3a6c;font-size:27px;font-weight:600;margin-bottom:8px;">${_greet}</p>
         <h2 style="font-size:56px;color:#1a3a6c;font-weight:700;letter-spacing:-1px;">법률 전문 도우미 똑똑 입니다</h2>
       </div>
     `;
