@@ -227,7 +227,7 @@ def columns_preview(rows, n=3):
 OFFICIAL = ('.go.kr', '.or.kr', '.seoul.kr', '.busan.kr', '.daegu.kr', '.incheon.kr', '.ulsan.kr')
 
 
-def import_collected(folder, user, force=False, dry=False):
+def import_collected(folder, user, force=False, dry=False, only=None):
     """data/collected/<시도>_<시군구>.csv(+.json): 공공데이터에 없는 지자체를 공식 홈페이지·조례 별표에서 옮긴 표.
     출처가 공공 도메인이 아니거나 유료 품목이 20행 미만이면 넣지 않는다."""
     import csv, os
@@ -240,6 +240,8 @@ def import_collected(folder, user, force=False, dry=False):
         if not fn.endswith('.csv'):
             continue
         base = fn[:-4]
+        if only and base not in only:              # 일부 파일만 다시 넣을 때(force 를 그 파일에만)
+            continue
         meta = {}
         mp = os.path.join(folder, base + '.json')
         if os.path.exists(mp):
