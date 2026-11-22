@@ -420,6 +420,8 @@ def _equiv_rows(c, q, label):
                 continue
             seen.add((spec, x['fee']))
             out.append({'item': label, 'spec': spec, 'fee': x['fee'], 'note': note})
+        if _unclear(out) or (len(out) > 1 and _not_one_object(out, name)) or all(_RATE.search(str(o['spec'])) for o in out):
+            continue          # 규격 원문 유실·무게 단가·다른 물건 묶음이면 다음 대체 항목으로
         return out, name
     return None
 
