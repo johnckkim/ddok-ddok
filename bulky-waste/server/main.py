@@ -194,15 +194,25 @@ def _cron_ok(request, key):
 
 
 @app.get('/api/cron/ai')
-def cron_ai(request: Request, key: str = '', q: str = '베드 범퍼', m: str = 'seoul-eunpyeong'):
+def cron_ai(request: Request, key: str = '', q: str = '베드 범퍼', m: str = 'seoul-eunpyeong', models: str = ''):
     """AI 연결 점검(운영자용): 모델·고른 품목·오류."""
     if not _cron_ok(request, key):
         raise HTTPException(403, '권한이 없습니다')
     c = S.ctx(m)
     names = [x['disp_item'] or x['name'] for x in c.local]
+    if models:   # 모델별 시험: 각 모델이 고른 품목·걸린 시간
+        out = {}
+        for mm in [x.strip() for x in models.split(',') if x.strip()][:6]:
+            t0 = __import__('time').time()
+            try:
+                out[mm] = [ai._chat(ai.PROMPT.format(item=q, muni=c.name, names='\n'.join(dict.fromkeys(names))), only=[mm], budget=25)[:300],
+                           round(__import__('time').time() - t0, 1)]
+            except Exception as e:
+                out[mm] = [str(e)[:300], round(__import__('time').time() - t0, 1)]
+        return out
     picks = ai.pick_items(c.muni, c.name, q, names) if names else []
     return {'available': ai.available(), 'model': ai.LAST.get('model') or ai._MODEL.get('id'), 'picks': picks,
-            'skipped': sorted(ai._MODEL.get('bad') or []), 'candidates': (ai._MODEL.get('list') or [])[:30],
+            'skipped': sorted(ai._MODEL.get('bad') or []), 'tries': ai.LAST.get('tries'), 'candidates': (ai._MODEL.get('list') or [])[:30],
             'error': ai.LAST.get('error'), 'quote': S.quote(m, [{'name': q}])}
 
 

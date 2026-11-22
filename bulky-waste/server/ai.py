@@ -20,7 +20,7 @@ PREFER = [m.strip() for m in os.environ.get('AI_MODEL', '').split(',') if m.stri
 _HDR = {'token': '', 'at': 0.0}      # 마지막 요청 헤더의 OIDC 토큰
 _MODEL = {'id': None, 'at': 0.0, 'list': None}
 _TEST = []                            # 테스트에서 가짜 응답 함수를 끼워 넣는 자리
-LAST = {'error': '', 'model': ''}
+LAST = {'error': '', 'model': '', 'tries': []}
 
 
 def remember_header_token(tok):
@@ -69,16 +69,25 @@ def model():
     return _MODEL.get('id') or (candidates() or PREFER)[0]
 
 
-def _chat(prompt):
-    """되는 모델을 찾을 때까지 차례로 시도(무료 등급 제한·없는 모델은 다음으로). 되는 모델은 기억한다."""
-    order = ([_MODEL['id']] if _MODEL.get('id') else []) + [m for m in candidates() if m != _MODEL.get('id')]
+def _chat(prompt, only=None, budget=None):
+    """되는 모델을 찾을 때까지 차례로 시도(무료 등급 제한·빈 답·시간 초과는 다음으로). 되는 모델은 기억한다.
+    전체 대기 시간은 budget초를 넘기지 않는다."""
+    order = only or (([_MODEL['id']] if _MODEL.get('id') else []) + [m for m in candidates() if m != _MODEL.get('id')])
     bad = _MODEL.setdefault('bad', set())
+    slow = _MODEL.setdefault('slow', {})
+    tries = LAST['tries'] = []
+    t_end = time.time() + (budget or float(os.environ.get('AI_BUDGET', '12')))
     last = None
-    for m in [m for m in order if m not in bad][:12]:
+    for m in [m for m in order if only or (m not in bad and slow.get(m, 0) < 2)][:12]:
+        left = t_end - time.time()
+        if left < 2:
+            break
+        t0 = time.time()
         try:
-            out = _req('/chat/completions', {'model': m, 'max_tokens': 2000, 'temperature': 0,
-                                             'messages': [{'role': 'user', 'content': prompt}]})
+            out = _req('/chat/completions', {'model': m, 'max_tokens': 1500, 'temperature': 0,
+                                             'messages': [{'role': 'user', 'content': prompt}]}, timeout=min(TIMEOUT, left))
             text = out['choices'][0]['message'].get('content') or ''
+            tries.append((m, round(time.time() - t0, 1), 'ok' if text.strip() else 'empty'))
             if not text.strip():
                 last = f'{m}: 빈 답'
                 bad.add(m)
@@ -88,13 +97,23 @@ def _chat(prompt):
             return text
         except urllib.error.HTTPError as e:
             body = e.read().decode('utf-8', 'replace')[:300]
+            tries.append((m, round(time.time() - t0, 1), f'HTTP {e.code} {body[:120]}'))
             last = f'{m}: HTTP {e.code} {body}'
             if e.code in (400, 403, 404) and ('model' in body.lower() or 'provider' in body.lower() or 'tier' in body.lower()):
                 bad.add(m)
                 if _MODEL.get('id') == m:
                     _MODEL['id'] = None
                 continue
+            if e.code == 429:
+                continue
             raise RuntimeError(last)
+        except Exception as e:          # 시간 초과·연결 오류 → 다음 모델(두 번 느리면 빼 둔다)
+            tries.append((m, round(time.time() - t0, 1), f'{type(e).__name__}'))
+            last = f'{m}: {type(e).__name__}: {e}'
+            slow[m] = slow.get(m, 0) + 1
+            if _MODEL.get('id') == m:
+                _MODEL['id'] = None
+            continue
     raise RuntimeError(last or '쓸 수 있는 모델이 없습니다')
 
 
