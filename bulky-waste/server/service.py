@@ -367,6 +367,67 @@ def ticket(tid):
             'message': ' '.join(msg), 'ticket': t['id']}
 
 
+CONTACT_KEEP_DAYS = 90
+
+
+def _purge_contacts():
+    """연락처는 받은 날부터 90일 뒤 지운다(동의 문구와 같은 기간)."""
+    cut = time.time() - CONTACT_KEEP_DAYS * 86400
+    old = store.q('SELECT id FROM ticket WHERE contact_at IS NOT NULL AND contact_at < ?', (cut,))
+    if not old:
+        return
+    store.x('UPDATE ticket SET contact_name=NULL, contact_phone=NULL, contact_at=NULL WHERE contact_at < ?', (cut,))
+    for r in store.q("SELECT id, contact FROM review WHERE contact IS NOT NULL AND contact != ''"):
+        keep = [k for k in json.loads(r['contact']) if k.get('at', 0) >= cut]
+        store.x('UPDATE review SET contact=? WHERE id=?', (json.dumps(keep, ensure_ascii=False) if keep else None, r['id']))
+
+
+def save_contact(tid, name, phone, agree):
+    """'확인 후 안내' 품목에 고객 이름·휴대폰 번호를 붙인다 → 운영 화면 검토 대기열에 보이고, 담당자가 문자로 알려 준다."""
+    t = store.q('SELECT * FROM ticket WHERE id=?', (str(tid or '').lower(),), one=True)
+    if not t:
+        return {'status': 'error', 'message': '접수번호를 찾을 수 없습니다. 품목을 다시 입력해 주세요.'}
+    name = re.sub(r'\s+', ' ', str(name or '')).strip()
+    digits = re.sub(r'\D', '', str(phone or ''))
+    if agree is not True:
+        return {'status': 'error', 'message': '개인정보 수집·이용에 동의해 주세요.'}
+    if not (1 <= len(name) <= 20) or re.search(r'[<>]', name):
+        return {'status': 'error', 'message': '이름을 확인해 주세요.'}
+    if not re.fullmatch(r'01[016789]\d{7,8}', digits):
+        return {'status': 'error', 'message': '휴대폰 번호를 확인해 주세요. (예: 010-1234-5678)'}
+    shown = f'{digits[:3]}-{digits[3:-4]}-{digits[-4:]}'
+    now = time.time()
+    _purge_contacts()
+    store.x('UPDATE ticket SET contact_name=?, contact_phone=?, contact_at=? WHERE id=?', (name, shown, now, t['id']))
+    for it in json.loads(t['items']):
+        rv = store.q('SELECT contact FROM review WHERE id=?', (it['rid'],), one=True)
+        if not rv:
+            continue
+        lst = [k for k in (json.loads(rv['contact']) if rv['contact'] else []) if k.get('phone') != shown]
+        lst.append({'name': name, 'phone': shown, 'ticket': t['id'], 'item': it['name'], 'at': now})
+        store.x('UPDATE review SET contact=?, updated_at=? WHERE id=?', (json.dumps(lst, ensure_ascii=False), now, it['rid']))
+    return {'status': 'ok', 'message': f'접수되었습니다. 확인되는 대로 {shown[:4]}****-{shown[-4:]} 번호로 문자 드리겠습니다.'}
+
+
+def _shop_rescue(c, name):
+    """'확인 후 안내'로 갈 품목을 쇼핑몰(공식 API)에서 찾아 본다. 상품 분류명이 이 지자체 조례·확정표로 바로 안내되면
+    '○○ 맞으신가요?' 카드를 돌려준다. 쇼핑몰 키가 없거나 안내할 수 있는 분류가 없으면 None."""
+    if not shopping.providers():
+        return None
+    shop = _shopping_candidates(c, name)
+    if not shop:
+        return None
+    ok = [(d, r) for d, r in _evaluate(c, shop, name) if r['kind'] == 'rows' and not r.get('review')]
+    if not ok:
+        return None
+    top, res = ok[0]
+    st = {'m': c.muni, 'e': name, 's': 1, 'p': 'yesno', 'c': [_cand_tuple(top)], 'x': [top['label']]}
+    card = {'kind': 'yesno', 'question': f"문의하신 품목이 {top['label']}{josa(top['label'])} 맞으신가요?", 'item_label': top['label'],
+            'product': {'title': top.get('title', ''), 'image': top.get('img', ''), 'link': top.get('link', '')},
+            'size_options': _size_options(res['rows'])}
+    return _card_public(st, card)
+
+
 # ================================================================ 확인 질문 흐름 (HANDOFF 5절)
 def _cand_tuple(d):
     return [d['label'], d['query'], d.get('desc', ''), d.get('img', ''), d.get('link', ''), d.get('title', '')]
@@ -610,7 +671,11 @@ def quote(muni, items):
             if res.get('review'):          # 정책 '바로 보여주기'여도 운영자 확정은 받는다
                 enqueue_review(c, name, _label_for(c, name), res)
         elif res['kind'] == 'pending':
-            pend.append((name, _label_for(c, name), res))
+            card = _shop_rescue(c, name)
+            if card:
+                cards.append(card)
+            else:
+                pend.append((name, _label_for(c, name), res))
         else:
             r = start_confirm(c, name, res.get('names'))
             if r['kind'] == 'rows':

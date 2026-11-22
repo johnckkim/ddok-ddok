@@ -287,6 +287,12 @@ def init():
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
     SYNC.pull(force=True)
     seeded = seed()
+    for sql in ('ALTER TABLE ticket ADD COLUMN contact_name TEXT', 'ALTER TABLE ticket ADD COLUMN contact_phone TEXT',
+                'ALTER TABLE ticket ADD COLUMN contact_at REAL'):
+        try:
+            x(sql)          # 예전 DB에 연락처 칸 추가(이미 있으면 그대로)
+        except Exception:
+            pass
     if q("SELECT 1 FROM municipality WHERE code='gwacheon' AND name='과천시'", one=True):   # 이름 체계 통일(시도 붙임)
         x("UPDATE municipality SET name='경기도 과천시' WHERE code='gwacheon'")
         set_setting('source:gwacheon', 'manual')

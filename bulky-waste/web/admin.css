@@ -49,3 +49,8 @@ pre.json { background: var(--bg); border: 1px solid var(--line); border-radius: 
 .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
 .chipsline { display: flex; flex-wrap: wrap; gap: 4px; }
 .chipsline span { background: var(--bg); border: 1px solid var(--line); border-radius: 999px; padding: 1px 8px; font-size: 13px; }
+
+.rv .contacts { margin-top: 10px; padding: 10px 12px; border-radius: 10px; background: var(--brand-soft); }
+.rv .contacts p { margin: 0 0 4px; }
+.rv .contacts ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+.rv .contacts li { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 14px; }

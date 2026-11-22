@@ -103,6 +103,16 @@ def ticket(tid: str, request: Request):
     return t
 
 
+@app.post('/api/ticket/{tid}/contact')
+async def ticket_contact(tid: str, request: Request):
+    rate_limit(request, 'contact')
+    b = await request.json()
+    r = await run_in_threadpool(S.save_contact, tid, b.get('name'), b.get('phone'), b.get('agree'))
+    if r['status'] != 'ok':
+        raise HTTPException(400, r['message'])
+    return r
+
+
 @app.post('/api/quote/export')
 async def quote_export(request: Request):
     """화면에 받은 고객용 4칸(품목·규격·수수료·배출 안내)만 CSV/엑셀로 담는다(다른 칸은 버림)."""

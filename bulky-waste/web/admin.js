@@ -95,6 +95,7 @@
       '<div class="grid"><div><dl class="kv">' + kv.map(function (x) { return '<dt>' + esc(x[0]) + '</dt><dd>' + esc(x[1]) + '</dd>'; }).join('') + '</dl>' +
       (r.dims ? '<p class="muted">치수: ' + esc(Object.keys(r.dims).map(function (k) { return ({ width: '가로', depth: '세로', height: '높이' })[k] + ' ' + r.dims[k] + 'cm'; }).join(', ')) + '</p>' : '') +
       (r.memo ? '<p class="muted">메모: ' + esc(r.memo) + '</p>' : '') +
+      contactsHTML(r) +
       (r.has_photo ? '<div class="photo"><img src="/api/admin/review/' + r.id + '/photo" alt="문의 사진" loading="lazy"></div>' : '') +
       '</div><div>' +
       '<div class="form-inline"><label>품목명(확정표에 들어갈 이름)<input data-f="item" value="' + esc(r.query) + '"' + (editable ? '' : ' disabled') + '></label>' +
@@ -108,6 +109,21 @@
         : '<p class="muted">' + esc(r.resolved_by || '') + ' · ' + when(r.resolved_at) + '</p>') +
       '</div></div></article>';
   }
+  /* 고객이 남긴 이름·휴대폰 → 확정 뒤 보낼 문자 문구 복사 */
+  function smsText(r, k) {
+    var rows = r.result || [];
+    var lines = rows.map(function (x) { return (x['규격'] && x['규격'] !== '모든규격' ? x['규격'] + ' ' : '') + x['수수료'] + (x['안내'] ? ' (' + x['안내'] + ')' : ''); });
+    return '[우리동네플러스] ' + k.name + '님, 문의하신 \'' + k.item + '\' 대형폐기물 수수료 안내드립니다.\n' +
+      (lines.length ? lines.join('\n') : '해당 지자체 담당 부서로 문의해 주세요.') + '\n자세히 보기: ' + location.origin + '/?t=' + k.ticket;
+  }
+  function contactsHTML(r) {
+    var list = r.contact || [];
+    if (!list.length) return '';
+    return '<div class="contacts"><p class="muted">문자 요청 ' + list.length + '명</p><ul>' + list.map(function (k, i) {
+      return '<li><b>' + esc(k.name) + '</b> <a href="tel:' + esc(k.phone) + '">' + esc(k.phone) + '</a> <span class="muted">' + when(k.at) + '</span>' +
+        (r.status !== 'open' ? ' <button class="btn small" data-act="sms" data-i="' + i + '">문자 문구 복사</button>' : '') + '</li>';
+    }).join('') + '</ul>' + (r.status === 'open' ? '<p class="muted">확정하면 보낼 문자 문구를 복사할 수 있습니다.</p>' : '') + '</div>';
+  }
   function rowEdit(x, editable) {
     var spec = x.spec || x['규격'] || '모든규격';
     var fee = x.method || x.fee || x['수수료'] || '';
@@ -119,6 +135,12 @@
     el.addEventListener('click', function (e) {
       var b = e.target.closest('[data-act]'); if (!b) return;
       var a = b.dataset.act;
+      if (a === 'sms') {
+        var text = smsText(r, r.contact[+b.dataset.i]);
+        (navigator.clipboard ? navigator.clipboard.writeText(text) : Promise.reject()).then(function () { toast('문자 문구를 복사했습니다'); },
+          function () { window.prompt('문자 문구', text); });
+        return;
+      }
       if (a === 'addrow') { $('tbody', el).insertAdjacentHTML('beforeend', rowEdit({ spec: '', fee: '' }, true)); return; }
       if (a === 'delrow') { b.closest('tr').remove(); return; }
       var body = { action: a === 'reject' ? 'reject' : a };

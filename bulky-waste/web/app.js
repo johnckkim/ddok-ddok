@@ -190,9 +190,34 @@
     el._rows = rows;
   }
   function addPending(names, tk) {
-    addBot('<p class="lead">확인 후 안내드리겠습니다.</p><ul class="plist">' + names.map(function (n) { return '<li>' + esc(n) + '</li>'; }).join('') + '</ul>' +
-      (tk ? '<div class="tk">접수번호 <code>' + esc(tk) + '</code><button type="button" data-ticket="' + esc(tk) + '">확인 주소 복사</button></div>' +
-        '<p class="sub">담당자가 금액을 정하면 이 주소에서 바로 볼 수 있습니다.</p>' : ''), 'pending');
+    var el = addBot('<p class="lead">확인 후 안내드리겠습니다.</p><ul class="plist">' + names.map(function (n) { return '<li>' + esc(n) + '</li>'; }).join('') + '</ul>' +
+      (tk ? '<form class="contact" novalidate><p class="sub">이름과 휴대폰 번호를 남겨 주시면 확인되는 대로 문자로 알려 드립니다.</p>' +
+        '<div class="cf"><label>이름<input name="name" maxlength="20" autocomplete="name" required></label>' +
+        '<label>휴대폰 번호<input name="phone" type="tel" inputmode="numeric" maxlength="13" autocomplete="tel" placeholder="010-1234-5678" required></label></div>' +
+        '<label class="agree"><input type="checkbox" name="agree"> <span>[필수] 안내 문자 발송을 위해 이름·휴대폰 번호를 수집·이용하는 데 동의합니다. (보관 90일 후 파기)</span></label>' +
+        '<button type="submit" class="pri block">문자로 받기</button><p class="err" hidden></p></form>' +
+        '<div class="tk">접수번호 <code>' + esc(tk) + '</code><button type="button" data-ticket="' + esc(tk) + '">확인 주소 복사</button></div>' : ''), 'pending');
+    var f = el.querySelector('form.contact');
+    if (!f) return;
+    var phone = f.querySelector('[name=phone]');
+    phone.addEventListener('input', function () {
+      var d = phone.value.replace(/\D/g, '').slice(0, 11);
+      phone.value = d.length < 4 ? d : d.length < 8 ? d.slice(0, 3) + '-' + d.slice(3) : d.slice(0, 3) + '-' + d.slice(3, d.length - 4) + '-' + d.slice(-4);
+    });
+    f.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var err = f.querySelector('.err');
+      var body = { name: f.name.value.trim(), phone: phone.value, agree: f.agree.checked };
+      var bad = !body.name ? '이름을 입력해 주세요.' : !/^01[016789]\d{7,8}$/.test(phone.value.replace(/\D/g, '')) ? '휴대폰 번호를 확인해 주세요. (예: 010-1234-5678)'
+        : !body.agree ? '개인정보 수집·이용에 동의해 주세요.' : '';
+      if (bad) { err.textContent = bad; err.hidden = false; return; }
+      err.hidden = true;
+      var btn = f.querySelector('button[type=submit]'); btn.disabled = true;
+      api('/api/ticket/' + encodeURIComponent(tk) + '/contact', body).then(function (j) {
+        f.outerHTML = '<p class="done-msg">' + esc(j.message) + '</p>';
+        scrollEnd();
+      }).catch(function (x) { btn.disabled = false; err.textContent = x.message; err.hidden = false; });
+    });
   }
   function linesHTML(rows) {
     return '<ul class="lines">' + rows.map(function (r) {

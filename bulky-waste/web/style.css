@@ -264,3 +264,17 @@ table.fees tr.same td.item::after { content: "〃"; color: var(--ink-3); }
 .msg table.fees th, .msg table.fees td { padding: 8px 4px; font-size: 14px; }
 .msg table.fees tr.same td.item { color: inherit; }
 .msg table.fees tr.same td.item::after { content: none; }
+
+/* 확인 후 안내: 이름·휴대폰 받기 */
+.msg .contact { margin: 6px 0 10px; display: grid; gap: 8px; }
+.msg .contact .sub { margin: 0; }
+.msg .contact .cf { display: grid; grid-template-columns: 1fr 1.4fr; gap: 8px; }
+@media (max-width: 380px) { .msg .contact .cf { grid-template-columns: 1fr; } }
+.msg .contact label { display: grid; gap: 4px; font-size: 13px; color: var(--ink-2); }
+.msg .contact input[name] { font: inherit; font-size: 16px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); color: var(--ink); min-width: 0; }
+.msg .contact .agree { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; line-height: 1.45; }
+.msg .contact .agree input { width: 18px; height: 18px; margin: 1px 0 0; flex: none; }
+.msg .contact button.pri { padding: 11px; border-radius: 10px; border: 0; background: var(--brand); color: var(--brand-ink); font-weight: 700; font-size: 15px; cursor: pointer; }
+.msg .contact button.pri:disabled { opacity: .6; }
+.msg .contact .err { margin: 0; color: #c0392b; font-size: 13px; }
+.msg .done-msg { margin: 6px 0 10px; font-weight: 700; color: var(--ink); }

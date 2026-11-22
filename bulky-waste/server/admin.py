@@ -94,11 +94,11 @@ def try_item(q: str, muni: str = 'gwacheon', u=Depends(me)):
 @router.get('/review')
 def review_list(muni: str = 'gwacheon', status: str = 'open', u=Depends(me)):
     _muni(muni)
-    rows = store.q('SELECT id,muni,query,label,status,detail,proposal,asks,dims,memo,created_at,updated_at,resolved_by,resolved_at,result,'
+    rows = store.q('SELECT id,muni,query,label,status,detail,proposal,asks,dims,memo,contact,created_at,updated_at,resolved_by,resolved_at,result,'
                    '(attachment IS NOT NULL) AS has_photo FROM review WHERE muni=? AND status=? ORDER BY asks DESC, updated_at DESC LIMIT 300',
                    (muni, status))
     for r in rows:
-        for k in ('detail', 'proposal', 'result', 'dims'):
+        for k in ('detail', 'proposal', 'result', 'dims', 'contact'):
             r[k] = json.loads(r[k]) if r.get(k) else None
         r['category'] = C.classify(r['label'] or r['query'])
     return {'items': rows}

@@ -400,21 +400,6 @@ def test_customer_pages_and_static_clean():
     SEEN.append(('/api/quote/export(xlsx)', '\n'.join('\t'.join(str(v or '') for v in row) for row in ws.iter_rows(values_only=True))))
 
 
-def test_zz_all_customer_responses_forbidden_words():
-    assert len(SEEN) > 40
-    for url, body in SEEN:
-        if body.startswith('PK'):          # 엑셀(zip) 본문은 아래에서 풀어서 검사
-            continue
-        assert_clean(body, url)
-    # 고객 응답 JSON 키에도 근거 필드가 없어야 한다
-    for url, body in SEEN:
-        if url.startswith('/api/') and body.startswith('{'):
-            j = json.loads(body)
-            for r in j.get('rows', []):
-                assert set(r) <= {'품목', '규격', '수수료', '안내', '분류'}, (url, r)
-
-
-# ------------------------------------------------------------------ 공공데이터 지자체 가져오기
 def _fake_public_rows():
     rows = []
     def add(ctpv, sgg, inst, items, date='2026-06-30'):
@@ -499,3 +484,46 @@ def test_bed_bumper_equivalent_item():
     c.local = [row('자동차범퍼', '모든규격', 9000)]
     assert S._equiv_rows(c, '베드 범퍼', '베드 범퍼') is None
     assert S._equiv_rows(c, '소파', '소파') is None
+
+
+def test_pending_contact_name_phone():
+    """확인 후 안내 → 이름·휴대폰(동의 필수) → 운영 화면 검토 대기열에 연락처, 고객 응답에는 가린 번호만."""
+    j = quote('요술램프 대형')
+    assert j['pending'] and j['ticket']
+    url = f"/api/ticket/{j['ticket']}/contact"
+    assert cust('post', url, json={'name': '홍길동', 'phone': '010-1234-5678', 'agree': False}).status_code == 400
+    assert cust('post', url, json={'name': '홍길동', 'phone': '02-123-4567', 'agree': True}).status_code == 400
+    assert cust('post', url, json={'name': '', 'phone': '01012345678', 'agree': True}).status_code == 400
+    assert cust('post', '/api/ticket/zzzzzzzz/contact', json={'name': '홍길동', 'phone': '01012345678', 'agree': True}).status_code == 400
+    r = cust('post', url, json={'name': '홍길동', 'phone': '01012345678', 'agree': True})
+    assert r.status_code == 200 and '010-****-5678' in r.json()['message'] and '1234' not in r.text
+    rv = [x for x in admin().get('/api/admin/review?muni=gwacheon').json()['items'] if x['query'] == '요술램프 대형']
+    assert rv and rv[0]['contact'][0]['name'] == '홍길동' and rv[0]['contact'][0]['phone'] == '010-1234-5678'
+    assert rv[0]['contact'][0]['ticket'] == j['ticket']
+
+
+def test_shopping_rescues_pending_item(fake_shop):
+    """조례·확정표에 없는 이름이라도 쇼핑몰 분류명이 조례 품목이면 '○○ 맞으신가요?'로 바로 묻는다."""
+    class P3(FakeProvider):
+        def search(self, q):
+            P = shopping.Product
+            return [P(title='냥이 원목 하우스 3단', image='https://example.com/z.jpg', link='https://example.com/z', path=['반려동물', '고양이', '캣타워'], leaf='캣타워')] * 3
+    shopping._TEST_PROVIDER[:] = [P3()]
+    j = quote('냥냥하우스 3단')
+    assert j['pending'] == [] and j['needs_confirm'][0]['kind'] == 'yesno' and j['needs_confirm'][0]['item_label'] == '캣타워'
+    shopping._TEST_PROVIDER[:] = []
+    assert quote('냥냥하우스 3단')['pending'] == ['냥냥하우스 3단']
+
+
+def test_zz_all_customer_responses_forbidden_words():
+    assert len(SEEN) > 40
+    for url, body in SEEN:
+        if body.startswith('PK'):          # 엑셀(zip) 본문은 아래에서 풀어서 검사
+            continue
+        assert_clean(body, url)
+    # 고객 응답 JSON 키에도 근거 필드가 없어야 한다
+    for url, body in SEEN:
+        if url.startswith('/api/') and body.startswith('{'):
+            j = json.loads(body)
+            for r in j.get('rows', []):
+                assert set(r) <= {'품목', '규격', '수수료', '안내', '분류'}, (url, r)
