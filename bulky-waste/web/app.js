@@ -38,9 +38,25 @@
 
   /* ---------- 대화 ---------- */
   var thread = $('#thread');
-  function scrollEnd() {
-    requestAnimationFrame(function () { window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }); });
+  var chat = $('#chat');
+  function scrollEnd(instant) {
+    requestAnimationFrame(function () { chat.scrollTo({ top: chat.scrollHeight, behavior: instant ? 'auto' : 'smooth' }); });
   }
+  /* 키보드가 올라오면 보이는 높이(visualViewport)에 화면을 맞춰 입력창이 항상 키보드 위에 오게 한다 */
+  function fitViewport() {
+    var vv = window.visualViewport;
+    var h = vv ? vv.height : window.innerHeight;
+    var top = vv ? vv.offsetTop : 0;
+    document.documentElement.style.setProperty('--app-h', h + 'px');
+    document.documentElement.style.setProperty('--app-top', top + 'px');
+  }
+  fitViewport();
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', function () { fitViewport(); scrollEnd(true); });
+    window.visualViewport.addEventListener('scroll', fitViewport);
+  }
+  window.addEventListener('resize', fitViewport);
+  window.addEventListener('orientationchange', function () { setTimeout(fitViewport, 300); });
   function addUser(text) {
     var el = document.createElement('div');
     el.className = 'msg user';
@@ -110,6 +126,7 @@
     }).join('');
   }
   $('#input').addEventListener('input', renderSuggest);
+  $('#input').addEventListener('focus', function () { setTimeout(function () { fitViewport(); scrollEnd(true); }, 250); });
   $('#suggest').addEventListener('click', function (e) {
     var b = e.target.closest('[data-code]'); if (!b) return;
     setMuni(MUNIS.filter(function (m) { return m.code === b.dataset.code; })[0]);

@@ -36,6 +36,15 @@ def main():
             print(f'[{name}] 문서 폭 {sw}/{cw}, 표 폭 {tw}/{bw}')
             if sw > cw or tw > bw: ok = False; print('  ✗ 가로 스크롤')
             if OUT: pg.screenshot(path=os.path.join(OUT, f'{name}_3_result.png'), full_page=True)
+            # 키보드가 올라와 보이는 높이가 줄어도 입력창이 화면 안(맨 아래)에 있어야 한다
+            for kh in (420, 330):
+                pg.set_viewport_size({'width': vw, 'height': kh}); pg.focus('#input'); pg.wait_for_timeout(400)
+                box = pg.query_selector('#composer').bounding_box(); ih = pg.evaluate('window.innerHeight')
+                last = pg.eval_on_selector_all('.msg', 'els => els[els.length-1].getBoundingClientRect().bottom')
+                print(f'[{name}] 보이는 높이 {kh}: 입력창 {box["y"]:.0f}~{box["y"]+box["height"]:.0f} / 화면 {ih}, 마지막 말풍선 끝 {last:.0f}')
+                if box['y'] < 0 or box['y'] + box['height'] > ih + 1: ok = False; print('  ✗ 입력창이 화면 밖')
+                if OUT: pg.screenshot(path=os.path.join(OUT, f'{name}_kb{kh}.png'))
+            pg.set_viewport_size({'width': vw, 'height': vh})
             pg.fill('#input', '다이슨'); pg.press('#input', 'Enter')
             # 새로 열어도 시작 질문은 항상 지역(전에 고른 지역은 버튼으로만)
             pg2 = ctx.new_page(); pg2.goto(BASE + '/'); pg2.wait_for_selector('.msg.bot [data-place]')

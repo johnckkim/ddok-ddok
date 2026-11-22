@@ -181,10 +181,12 @@ table.fees tr.same td.item::after { content: "〃"; color: var(--ink-3); }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
 
 /* ===================== 채팅형 화면 ===================== */
-.chat-page { min-height: 100dvh; display: flex; flex-direction: column; }
+.chat-page { position: fixed; left: 0; right: 0; top: var(--app-top, 0px); height: var(--app-h, 100dvh); margin: 0;
+  display: flex; flex-direction: column; overflow: hidden; }
+.chat-page .top { position: static; flex: none; }
 .chat-page .top { background: color-mix(in srgb, var(--panel) 88%, transparent); backdrop-filter: saturate(1.4) blur(10px); }
 .brand small { font-weight: 500; color: var(--ink-3); font-size: 13px; margin-left: 4px; }
-.chat { flex: 1; padding-bottom: 150px; }
+.chat { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; padding-bottom: 12px; }
 .thread { display: flex; flex-direction: column; gap: 14px; padding-top: 18px; }
 .intro { text-align: center; padding: 22px 8px 6px; }
 .intro img { border-radius: 14px; box-shadow: var(--shadow); }
@@ -235,7 +237,7 @@ table.fees tr.same td.item::after { content: "〃"; color: var(--ink-3); }
 .msg .lines li { padding: 8px 0; }
 
 /* 입력창 */
-.composer { position: fixed; left: 0; right: 0; bottom: 0; z-index: 6; padding: 10px 0 calc(10px + env(safe-area-inset-bottom));
+.composer { position: relative; flex: none; z-index: 6; padding: 8px 0 calc(8px + env(safe-area-inset-bottom));
   background: linear-gradient(to top, var(--bg) 70%, color-mix(in srgb, var(--bg) 0%, transparent)); }
 .composer .box { display: flex; align-items: center; gap: 8px; background: var(--panel); border: 1.5px solid var(--line); border-radius: 26px;
   padding: 6px 6px 6px 16px; box-shadow: 0 6px 24px rgba(16, 33, 30, .10); }
