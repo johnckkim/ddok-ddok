@@ -188,11 +188,12 @@ def _rows_for(c, q, r, label):
         k = E.norm(q)
         same = [x for x in ex if E.norm(x['name']) == k]
         ex = same or ex
-        names = list(dict.fromkeys(x['name'] for x in ex))
+        clean = lambda n: re.sub(r'\s*\(\d+\)\s*', ' ', n).strip()      # 원문 일련번호 '쇼파(1)' 제거
+        names = list(dict.fromkeys(clean(x['name']) for x in ex))
         seen = set()
         for x in sorted(ex, key=lambda x: x['fee']):
             disp_spec = x['disp_spec'] or C.tidy_spec(x['spec'])
-            item = label if len(names) == 1 else (x['disp_item'] or re.sub(r'\s+', ' ', x['name']))
+            item = label if len(names) == 1 else (x['disp_item'] or re.sub(r'\s+', ' ', clean(x['name'])))
             if (item, disp_spec, x['fee']) in seen:
                 continue
             seen.add((item, disp_spec, x['fee']))
