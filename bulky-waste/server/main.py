@@ -6,7 +6,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, JSONResponse, Response
 
-from . import admin, service as S, store
+from . import admin, ai, service as S, store
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 WEB = os.path.join(ROOT, 'web')
@@ -43,6 +43,7 @@ SEC_HEADERS = {
 @app.middleware('http')
 async def lifecycle(request: Request, call_next):
     await run_in_threadpool(ensure_ready)
+    ai.remember_header_token(request.headers.get('x-vercel-oidc-token'))
     path = request.url.path
     if path.startswith('/api/'):
         force = path.startswith('/api/admin/') and request.method != 'GET'
@@ -185,6 +186,23 @@ def cron_import(request: Request, key: str = '', targets: str = '', dry: str = '
     if mode == 'national':
         return natdata.apply_rows(rows, '배치', '공공데이터포털 15114146')
     return importer.run(rows, importer.parse_targets(targets), '배치', force=force == '1', dry=dry == '1')
+
+
+def _cron_ok(request, key):
+    secret = os.environ.get('CRON_SECRET')
+    return bool(secret) and (key == secret or request.headers.get('authorization') == f'Bearer {secret}')
+
+
+@app.get('/api/cron/ai')
+def cron_ai(request: Request, key: str = '', q: str = '베드 범퍼', m: str = 'seoul-eunpyeong'):
+    """AI 연결 점검(운영자용): 모델·고른 품목·오류."""
+    if not _cron_ok(request, key):
+        raise HTTPException(403, '권한이 없습니다')
+    c = S.ctx(m)
+    names = [x['disp_item'] or x['name'] for x in c.local]
+    picks = ai.pick_items(c.muni, c.name, q, names) if names else []
+    return {'available': ai.available(), 'model': ai.LAST.get('model') or ai._MODEL.get('id'), 'picks': picks,
+            'error': ai.LAST.get('error'), 'quote': S.quote(m, [{'name': q}])}
 
 
 @app.get('/api/cron/national')

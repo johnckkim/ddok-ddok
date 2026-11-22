@@ -6,7 +6,7 @@
 import json, os, re, secrets, tempfile, threading, time
 
 from engine import engine as E
-from . import catalog as C
+from . import ai, catalog as C
 from . import shopping, store
 from .tokens import sign, unsign
 
@@ -428,6 +428,29 @@ def _shop_rescue(c, name):
     return _card_public(st, card)
 
 
+def _ai_rescue(c, name):
+    """조례에서 못 찾은 이름 → AI가 이 지자체 조례 품목명 중에서 고른다 → 조례 금액으로 바로 안내되는 첫 품목을
+    '○○ 맞으신가요?'로 묻는다. 나머지 후보는 '아니요' 다음 선택지로 쓴다. AI를 쓸 수 없으면 None."""
+    if not ai.available():
+        return None
+    clean = lambda n: re.sub(r'\s*\(\d+\)\s*', ' ', n or '').strip()
+    names = [clean(x['disp_item'] or x['name']) for x in c.local] + [x['name'] for x in c.conf]
+    picks = ai.pick_items(c.muni, c.name, name, names)
+    ok = []
+    for p in picks:
+        res = resolve(c, p, label=p)
+        if res['kind'] == 'rows' and not res.get('review'):
+            ok.append(({'id': p, 'label': p, 'query': p, 'desc': ''}, res))
+    if not ok:
+        return None
+    top, res = ok[0]
+    st = {'m': c.muni, 'e': name, 's': 1, 'p': 'yesno', 'c': [_cand_tuple(top)], 'x': [top['label']],
+          'a': [d['label'] for d, _ in ok[1:]]}
+    card = {'kind': 'yesno', 'question': f"문의하신 품목이 {top['label']}{josa(top['label'])} 맞으신가요?", 'item_label': top['label'],
+            'product': None, 'size_options': _size_options(res['rows'])}
+    return _card_public(st, card)
+
+
 # ================================================================ 확인 질문 흐름 (HANDOFF 5절)
 def _cand_tuple(d):
     return [d['label'], d['query'], d.get('desc', ''), d.get('img', ''), d.get('link', ''), d.get('title', '')]
@@ -614,7 +637,8 @@ def confirm(token, answer, choice=None, size=None, text=None, photo=None, dims=N
         if answer == 'yes':
             return _finish(c, expr, d, size=size) or _answer(c)
         # 아니요 → 같은 검색·주변 후보 중 수수료가 서로 다른 것 3~4개 + 기타
-        others = [x for x in (_shopping_candidates(c, expr) or []) if x['label'] not in st.get('x', [])]
+        others = [{'id': n, 'label': n, 'query': n, 'desc': ''} for n in st.get('a', [])]
+        others += [x for x in (_shopping_candidates(c, expr) or []) if x['label'] not in st.get('x', [])]
         fb = [C.cand(i) for i in C.fallback_candidates(expr, c.hints)]
         seen = {x['label'] for x in others} | set(st.get('x', []))
         others += [x for x in fb if x['label'] not in seen]
@@ -671,7 +695,7 @@ def quote(muni, items):
             if res.get('review'):          # 정책 '바로 보여주기'여도 운영자 확정은 받는다
                 enqueue_review(c, name, _label_for(c, name), res)
         elif res['kind'] == 'pending':
-            card = _shop_rescue(c, name)
+            card = _shop_rescue(c, name) or _ai_rescue(c, name)
             if card:
                 cards.append(card)
             else:

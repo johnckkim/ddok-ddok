@@ -515,6 +515,28 @@ def test_shopping_rescues_pending_item(fake_shop):
     assert quote('냥냥하우스 3단')['pending'] == ['냥냥하우스 3단']
 
 
+def test_ai_picks_ordinance_item_then_yes():
+    """조례에서 못 찾은 이름 → AI가 조례 품목명 중 고름 → '○○ 맞으신가요?' → 예 → 조례 금액. 목록에 없는 이름은 버린다."""
+    from server import ai
+    seen = {}
+
+    def fake(prompt):
+        seen['p'] = prompt
+        return '{"items": ["없는품목", "캣타워"], "what": "고양이 놀이 가구"}'
+    ai._TEST[:] = [fake]
+    try:
+        j = quote('냥이궁전 대형')
+        card = j['needs_confirm'][0]
+        assert j['pending'] == [] and card['kind'] == 'yesno' and card['item_label'] == '캣타워'
+        assert '캣타워' in seen['p'] and '냥이궁전 대형' in seen['p']
+        r = cust('post', f"/api/confirm/{card['card_id']}", json={'answer': 'yes', 'size': '높이 1m 이상'}).json()
+        assert r['status'] == 'ok' and r['rows'][0]['수수료'] == '5,000원'
+        ai._TEST[:] = [lambda p: '{"items": [], "what": ""}']
+        assert quote('알수없는물건 특대')['pending'] == ['알수없는물건 특대']
+    finally:
+        ai._TEST.clear()
+
+
 def test_zz_all_customer_responses_forbidden_words():
     assert len(SEEN) > 40
     for url, body in SEEN:
