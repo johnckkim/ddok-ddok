@@ -646,13 +646,21 @@ def _resolve(c, q, label=None, expr=None):
     return {'kind': 'rows', 'rows': rows, 'result': r, 'review': review}
 
 
+def _cart_name(n):
+    # 조례 품목명 속 설명 괄호('(유사 매트리스)', '(유사한 품목이 없는 …)')는 담기 이름에서 뺀다
+    if not n:
+        return n
+    out = re.sub(r'\s*[(（][^()（）]*(유사|통계|추정|근거)[^()（）]*[)）]', '', str(n)).strip()
+    return out or str(n)
+
+
 def public_rows(c, rows, q=None):
     out = []
     for o in rows:
         out.append({'품목': o['item'], '규격': o['spec'],
                     '수수료': o.get('method') or _fee_text(o['fee']),
                     '안내': o.get('note') or '',
-                    '담기': o.get('cart') if 'cart' in o else o['item'],      # 장바구니에 담을 조례 품목('기타' = 조례에 없는 품목)
+                    '담기': _cart_name(o.get('cart') if 'cart' in o else o['item']),   # 장바구니에 담을 조례 품목('기타' = 조례에 없는 품목)
                     '분류': _category(c, o['item'], q or o['item'])})
     return out
 
