@@ -751,3 +751,41 @@ def test_tokens_order_is_fixed():
                            env=dict(os.environ, PYTHONHASHSEED=str(s), PYTHONIOENCODING='utf-8'),
                            cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__)))).stdout for s in (1, 2, 3)}
     assert len(outs) == 1 and outs.pop().startswith('(')
+
+
+def test_kid_item_drops_adult_sizes():
+    """아이 물건은 유아용 줄이 있으면 그 줄만, 없으면 2인용·더블 같은 어른 크기 줄을 뺀다."""
+    from server import service as S
+    rows = [{'spec': '유아용 침대', 'fee': 3000, 'src': '침대'}, {'spec': '1인용(틀)', 'fee': 5000, 'src': '침대'},
+            {'spec': '2인용(틀)', 'fee': 7000, 'src': '침대'}]
+    assert [o['spec'] for o in S._age_fit('아기침대', rows)] == ['유아용 침대']
+    sofa = [{'spec': '1인용', 'fee': 3000}, {'spec': '2인용', 'fee': 5000}, {'spec': '4인용 이상', 'fee': 9000}]
+    assert [o['spec'] for o in S._age_fit('어린이 소파', sofa)] == ['1인용']
+    assert len(S._age_fit('소파', sofa)) == 3
+
+
+def test_spec_column_hit():
+    """'매트리스'가 조례 '침대' 줄의 규격 칸에만 있으면 그 줄로 답한다(세트 줄은 뺀다)."""
+    from server import service as S
+
+    class R:
+        pass
+    c = R()
+    mk = lambda n, s, f: {'name': n, 'spec': s, 'fee': f, 'tok': S._tok(n), 'disp_item': '', 'disp_spec': ''}
+    c.local = [mk('침대', '1인용 (매트리스)', 5000), mk('침대', '2인용 (매트리스)', 8000), mk('침대', '1인용 세트(매트리스 1개+틀)', 10000),
+               mk('침대', '1인용(틀)', 5000), mk('소파', '1인용', 3000)]
+    for q in ('침대 매트리스', '매트리스'):
+        r = S._spec_hit(c, q, q)
+        assert r and [o['fee'] for o in r['rows']] == [5000, 8000], q
+    assert S._spec_hit(c, '냉장고', '냉장고') is None
+
+
+def test_kid_indirect_keeps_baby_row_not_bunk():
+    """'유아침대': 조례의 '아기/접이식 침대' 줄은 남기고 '어린이 2층 침대'는 뺀다. 성인용만 있으면 답하지 않는다."""
+    from server import service as S
+    rows = [{'item': '침대', 'spec': '유아용 침대', 'fee': 3000, 'src': '침대'},
+            {'item': '침대', 'spec': '어린이 2층 침대', 'fee': 20000, 'src': '침대'},
+            {'item': '침대', 'spec': '모든규격', 'fee': 5000, 'src': '아기/접이식 침대'}]
+    kept = S._age_fit('유아침대', S._fit_rows('유아침대', rows), strict=True)
+    assert sorted(o['fee'] for o in kept) == [3000, 5000]
+    assert S._age_fit('아기욕조', [{'spec': '성인용', 'fee': 5000}], strict=True) == []

@@ -435,14 +435,24 @@ def _equiv_rows(c, q, label):
     return None
 
 
-def _age_fit(q, rows):
+def _age_fit(q, rows, strict=False):
     """'아기 전동자동차'에 '성인용' 줄을, '성인용 자전거'에 '어린이용' 줄을 보이지 않는다(남는 줄이 없으면 그대로)."""
     kid, adult = C.CHILD_WORDS.search(q or ''), C.ADULT_WORDS.search(q or '')
     if not rows or bool(kid) == bool(adult):
         return rows
     bad = C.ADULT_WORDS if kid else C.CHILD_WORDS
     keep = [o for o in rows if not bad.search(str(o.get('spec') or ''))]
-    return keep or rows
+    if kid and keep:
+        txt = lambda o: str(o.get('spec') or '') + ' ' + str(o.get('src') or '')
+        own = [o for o in keep if C.CHILD_WORDS.search(txt(o))]
+        if own:                                   # 조례에 유아용 줄이 있으면 그 줄만(아기침대 → '유아용 침대')
+            return own
+        small = [o for o in keep if not _ADULT_SIZE.search(re.sub(r'\s', '', str(o.get('spec') or '')))]
+        keep = small or keep                      # 없으면 2인용·더블·대형 같은 어른 크기 줄은 빼고 1인용·소형만
+    return keep if strict else (keep or rows)     # strict: 맞는 줄이 없으면 빈 목록(간접 답이면 다른 방법으로)
+
+
+_ADULT_SIZE = re.compile(r'[2-9]인|더블|퀸|킹|슈퍼싱글|양수|대형|세트|업소|영업')
 
 
 def _row_words(text):
@@ -476,7 +486,7 @@ def _fit_rows(q, rows):
         m = re.search(r'‘(.+?)’', str(o.get('note') or ''))
         tf = {C.ROW_WORD[w] for w in _row_words(m.group(1))} if m else set()
         tf |= {C.ROW_WORD[w] for w in _row_words(re.sub(r'\(.*?\)', '', str(o.get('src') or '')))}
-        sw = _row_words(sp)
+        sw = _row_words(re.sub(r'\([^()]*포함[^()]*\)', '', sp))         # '모든규격(매트포함)'은 구성 설명
         sf = {C.ROW_WORD[w] for w in sw}
         if sf and not (sf & (qf | tf)):
             continue                                     # 규격에 다른 무리 물건 이름
@@ -485,7 +495,11 @@ def _fit_rows(q, rows):
             # '벽시계, 가방, …, 휠체어' 한 줄 묶음 이름은 종류 판단에 쓰지 않되, 괄호 속 종류는 본다('의자·쇼파류(돌·옥·황토 쇼파)')
             src = ''.join(re.findall(r'\(([^()]*)\)', src))
         here = sp.replace(' ', '') + '|' + src
-        if any(t in here and t not in qn and (t not in kid or grown) for t in C.TYPE_WORDS):
+        other = [t for t in C.TYPE_WORDS if t in here and t not in qn and not any(k in t for k in kid) and t not in ('접이식', '쌍둥이')]
+        if not grown and any(k in qn for k in kid) and any(k in here for k in kid) and not other:
+            out.append(o)                                # 아이 물건을 물었고 조례 줄도 아기·유아용이면 그 줄은 남긴다
+            continue
+        if any(t in here and t not in qn and (not any(k in t for k in kid) or grown) for t in C.TYPE_WORDS):
             continue                                     # 고객이 말하지 않은 다른 종류(규격 글이나 조례 품목 이름에)
         out.append(o)
     base = [o for o in out if not C.ROW_ADDON.search(str(o.get('spec') or ''))]
@@ -500,15 +514,65 @@ def _region_has(c, word):
     return False
 
 
+def _spec_hit(c, q, label):
+    """조례 품목명엔 없고 규격 칸에만 있는 물건('침대' 줄의 '1인용 매트리스'). 앞말이 품목이면 그 품목 안에서만 찾는다."""
+    qn = E.norm(q)
+    if len(qn) < 3:
+        return None
+    sp = lambda r: re.sub(r'[\s()\[\],·]', '', str(r['spec'] or '')).lower()     # 괄호 안('1인용 (매트리스)')도 본다
+    hit, best = [], 0
+    for r in c.local:                                   # '침대 매트리스' = 품목 '침대' + 규격 '매트리스'
+        for t in r['tok']:
+            rest = qn[len(t):]
+            if len(t) >= 2 and qn.startswith(t) and len(rest) >= 2 and rest in sp(r) and len(t) >= best:
+                if len(t) > best:
+                    hit, best = [], len(t)
+                hit.append(r)
+                break
+    if not hit:                                         # '매트리스' 혼자: 규격 칸에 그 말이 있는 한 품목
+        hit = [r for r in c.local if qn in sp(r) and qn not in ''.join(r['tok'])]
+    plain = [r for r in hit if '세트' not in str(r['spec'] or '')]
+    hit = plain or hit                                  # 매트리스만 물었으면 '세트(매트리스+틀)' 줄은 빼고
+    names = {r['name'] for r in hit}
+    if not hit or len(names) != 1:
+        return None
+    rows = _group_rows(hit, label)
+    return {'kind': 'rows', 'rows': rows, 'review': False,
+            'result': {'등급': 'L0 조례(규격 칸 일치)', '품목': q, '경로': f'조례 {next(iter(names))} 규격 일치'}}
+
+
 def resolve(c, q, label=None, expr=None):
     """품목명 1개 → {'kind': 'rows'|'pending'|'ask', rows, result(내부), names(ask일 때 후보)}"""
     res = _resolve(c, q, label, expr)
+    g0 = str(res.get('result', {}).get('등급') or '')
+    if res['kind'] == 'pending' or g0.startswith(('L3', 'L4')) or '과천 기준' in str(res.get('result', {}).get('경로') or ''):
+        sh = _spec_hit(c, expr or q, label or _label_for(c, q))
+        if sh:
+            done = _post(c, q, label, expr, sh)
+            if done['kind'] == 'rows':                  # 규격 칸 답이 끝까지 살아남을 때만 쓴다
+                return done
+    return _post(c, q, label, expr, res)
+
+
+def _post(c, q, label, expr, res):
+    res = _post1(c, q, label, expr, res)
+    res.pop('raw', None)
+    return res
+
+
+def _post1(c, q, label, expr, res):
     if res.get('rows'):
+        n0 = len(res['rows'])
+        res['raw'] = res['rows']
         res['rows'] = _age_fit(expr or q, res['rows'])
         lab = label or _label_for(c, q)
+        if len(res['rows']) < n0 and len({o.get('src') for o in res['rows']}) == 1:
+            for o in res['rows']:                       # 아이 줄만 남았으면 고객이 쓴 이름으로
+                if not o.get('method'):
+                    o['item'] = lab
         path = str(res.get('result', {}).get('경로') or '')
         if res['kind'] == 'rows' and any(k in path for k in _INDIRECT):
-            kept = _fit_rows(expr or q, res['rows'])
+            kept = _age_fit(expr or q, _fit_rows(expr or q, res.get('raw') or res['rows']), strict=True)   # 다른 물건 줄을 먼저 빼고 나서 나이 맞추기
             qn = re.sub(r'\s', '', expr or q) + '|' + E.norm(expr or q)
             want = [t for t in ('2층', '이층', '벙커', '돌', '흙', '옥', '황토', '안마', '업소', '영업', '대리석')
                     if t in qn]                           # 다른 종류를 뜻하는 앞말만(드럼세탁기는 세탁기 크기로 충분)
@@ -523,6 +587,10 @@ def resolve(c, q, label=None, expr=None):
                     return res
             if not kept:
                 return {'kind': 'pending', 'rows': [], 'result': dict(res['result'], 경로=path + ' (맞는 규격 없음)'), 'review': True}
+            if len(kept) < len(res['raw']) and C.CHILD_WORDS.search(expr or q) and len({o.get('src') for o in kept}) == 1:
+                for o in kept:                          # 아이 줄만 남았으면 고객이 쓴 이름으로
+                    if not o.get('method'):
+                        o['item'] = lab
             res['rows'] = kept
         _mark_cart(res, lab)
         seen, uniq = set(), []

@@ -364,3 +364,6 @@ table.fees tr.same td.item::after { content: "〃"; color: var(--ink-3); }
   content: ""; position: absolute; inset: -6px; }
 .msg .chips button, .msg .actions button { min-height: 44px; }
 .composer .box:focus-within { box-shadow: 0 0 0 3px var(--brand-soft), 0 6px 24px rgba(16, 33, 30, .10); }
+
+/* 지역을 바꾸기 전 답변: 담기 단추를 흐리게 */
+.msg.stale .row-cart, .msg.stale [data-act="cart"] { opacity: .35; }

@@ -177,9 +177,12 @@
   function setMuni(m, quiet) {
     if (!m) return;
     if (state.cart.length && state.muni && m.code !== state.muni) {   // 수수료는 지역마다 달라서 지역을 바꾸면 비운다
-      state.cart = []; renderCart(); toast(t('cartCleared'));
+      state.cart = []; renderCart(); sync(); toast(t('cartCleared'));
     }
     state.muni = m.code; state.muniName = m.name; state.muniDisp = m.disp || m.name;
+    Array.prototype.forEach.call(document.querySelectorAll('.msg'), function (el) {
+      if (el._muni && el._muni !== state.muni) el.classList.add('stale');
+    });
     $('#muniName').textContent = state.muniDisp; $('#muniPill').hidden = false;
     $('#muniPill').setAttribute('aria-label', t('regionChange', { m: state.muniDisp }));
     if (!quiet) addUser(state.muniDisp);
@@ -323,7 +326,7 @@
     var el = addBot('<p class="lead">' + esc(t('feeLead')) + '</p>' + (itemsCount(rows) === 1 ? linesHTML(rows, id) : tableHTML(rows, id)) +
       (multi ? '<p class="sub pick-hint">' + esc(t('pickHint')) + '</p>' : '') +
       '<div class="actions"><button type="button" class="pri cart-add" data-act="cart">' + esc(t('addCart')) + '</button></div>', 'result');
-    el._rows = rows; el._id = id;
+    el._rows = rows; el._id = id; el._muni = state.muni;
   }
   /* 품목별 묶음: [{name, idx:[행 번호…]}] */
   function groups(rows) {
@@ -404,6 +407,7 @@
 
   /* ---------- 장바구니 (원문 한국어 + 화면용 번역을 함께 들고 있다; 엑셀은 한국어 원문) ---------- */
   function addToCart(el) {
+    if (el._muni && el._muni !== state.muni) { toast(t('otherRegion')); return; }
     var rows = el._rows || [], gs = groups(rows), pick = [], miss = [];
     gs.forEach(function (g, k) {
       if (g.idx.length === 1) { pick.push(rows[g.idx[0]]); return; }
@@ -417,6 +421,7 @@
   function addRow(btn) {
     var el = btn.closest('.msg'), r = (el._rows || [])[+btn.dataset.addrow];
     if (!r) return;
+    if (el._muni && el._muni !== state.muni) { toast(t('otherRegion')); return; }   // 지역을 바꾼 뒤 예전 답의 줄
     pushCart([r]);
     btn.classList.add('done'); setTimeout(function () { btn.classList.remove('done'); }, 1200);
   }
@@ -462,6 +467,22 @@
     try { if (window.ReactNativeWebView) window.ReactNativeWebView.postMessage(JSON.stringify(item)); } catch (e) { /* 무시 */ }
     try { if (window.parent && window.parent !== window) window.parent.postMessage(item, '*'); } catch (e) { /* 무시 */ }
   }
+  /* 수량 바꾸기·빼기·비우기·지역 변경 뒤: 장바구니 전체를 'bw:cart-sync' 로 같은 4곳에 보낸다(앱 장바구니와 맞추기) */
+  function sync() {
+    var msg = { type: 'bw:cart-sync', municipality: state.muni, municipalityName: state.muniName,
+      items: state.cart.map(function (c) {
+        var n = feeNum(c.fee);
+        return { item: c.etc ? '기타' : (c.cartItem || c.item), productName: c.item, spec: c.etc ? '' : c.spec, sizeHint: c.spec,
+          fee: n, feeText: c.fee, etc: c.etc, qty: c.qty,
+          etcLines: c.etc && n ? etcPieces(n * c.qty).map(function (x) {
+            return { category: '기타', item_name: '금액', item_specification: '금액', price: x.price, count: x.count };
+          }) : [] };
+      }) };
+    try { window.dispatchEvent(new CustomEvent('bw:cart-sync', { detail: msg })); } catch (e) { /* 무시 */ }
+    try { if (window.UdongCart && typeof window.UdongCart.sync === 'function') window.UdongCart.sync(msg); } catch (e) { /* 무시 */ }
+    try { if (window.ReactNativeWebView) window.ReactNativeWebView.postMessage(JSON.stringify(msg)); } catch (e) { /* 무시 */ }
+    try { if (window.parent && window.parent !== window) window.parent.postMessage(msg, '*'); } catch (e) { /* 무시 */ }
+  }
   var CART_SVG = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M3 4h2l2.2 10.2a1.5 1.5 0 0 0 1.5 1.2h8.6a1.5 1.5 0 0 0 1.5-1.1l2.2-6.3H6.2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>' +
     '<circle cx="9.5" cy="19.5" r="1.5" fill="currentColor"/><circle cx="17" cy="19.5" r="1.5" fill="currentColor"/><path class="plus" d="M13 9v4M11 11h4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
   function rowCart(r, i) {
@@ -495,7 +516,7 @@
         '<span class="sp">' + esc(c.dSpec) + '</span>' +
         (c.dNote ? '<span class="nt">' + esc(c.dNote) + '</span>' : '') +
         (isUnit(c) ? '<span class="nt unit">' + esc(t('unitQty')) + '</span>' : '') +
-        (c.etc && feeNum(c.fee) ? '<span class="nt">' + esc(t('etcPay')) + ' ' + etcPieces(feeNum(c.fee)).map(function (x) { return won(x.price) + '×' + x.count; }).join(' + ') + '</span>' : '') + '</div>' +
+        (c.etc && feeNum(c.fee) ? '<span class="nt">' + esc(t('etcPay')) + ' ' + etcPieces(feeNum(c.fee) * c.qty).map(function (x) { return won(x.price) + '×' + x.count; }).join(' + ') + '</span>' : '') + '</div>' +
         '<div class="cq"><button type="button" data-cart="dec" data-n="' + k + '" aria-label="' + esc(c.dItem + ' ' + t('minus')) + '">−</button>' +
         '<b>' + c.qty + '</b><button type="button" data-cart="inc" data-n="' + k + '" aria-label="' + esc(c.dItem + ' ' + t('plus')) + '">+</button></div>' +
         '<span class="fe">' + (n === null ? esc(c.dFee) : won(n * c.qty)) + '</span>' +
@@ -521,7 +542,8 @@
   }
   function cartRows() {      // 내려받기는 한국어 원문(스티커 구매·신고에 쓰는 이름)
     return state.cart.map(function (c) {
-      return c.etc ? { '품목': '기타', '규격': c.spec, '수수료': c.fee, '안내': '제품명: ' + c.item + (c.note ? ' · ' + c.note : ''), '수량': c.qty }
+      var pc = c.etc && feeNum(c.fee) ? ' · 기타 금액 ' + etcPieces(feeNum(c.fee) * c.qty).map(function (x) { return x.price.toLocaleString('ko-KR') + '원×' + x.count; }).join(' + ') : '';
+      return c.etc ? { '품목': '기타', '규격': c.spec, '수수료': c.fee, '안내': '제품명: ' + c.item + (c.note ? ' · ' + c.note : '') + pc, '수량': c.qty }
         : { '품목': c.cartItem || c.item, '규격': c.spec, '수수료': c.fee, '안내': c.note, '수량': c.qty };
     });
   }
@@ -571,7 +593,7 @@
       else if (act === 'clear') state.cart = [];
       else if (act === 'text') { copy(cartText(), t('cartCopied')); return; }
       else if (act === 'xlsx') { download('xlsx', cartRows()); return; }
-      renderCart(); return;
+      renderCart(); sync(); return;
     }
     var row = e.target.closest('[data-i]');           // 규격 줄을 누르면 그 규격을 고른다
     if (row && !e.target.closest('input')) {
@@ -743,7 +765,17 @@
           var chip = document.querySelector('[data-place="gwacheon"]');
           var g = MUNIS.filter(function (m) { return m.code === 'gwacheon'; })[0];
           if (chip && g) chip.textContent = g.disp || g.name;
-          if (state.muni) { var m = MUNIS.filter(function (x) { return x.code === state.muni; })[0]; if (m) { state.muniDisp = m.disp; $('#muniName').textContent = m.disp; } }
+          if (state.muni) {
+            var m = MUNIS.filter(function (x) { return x.code === state.muni; })[0];
+            if (m && m.disp && m.disp !== state.muniDisp) {
+              var old = state.muniDisp;
+              state.muniDisp = m.disp; $('#muniName').textContent = m.disp;
+              $('#muniPill').setAttribute('aria-label', t('regionChange', { m: m.disp }));
+              Array.prototype.forEach.call(document.querySelectorAll('.msg .bubble b, .msg.user .bubble'), function (b) {
+                if (b.textContent === old) b.textContent = m.disp;      // 인사말의 지역 이름, 사용자가 고른 지역 말풍선
+              });
+            }
+          }
         });
         var sp = new URLSearchParams(location.search);
         var hit = MUNIS.filter(function (m) { return m.code === sp.get('m'); })[0];

@@ -134,6 +134,7 @@
     plus: ['하나 더하기', 'one more', '加一个', 'thêm một', 'เพิ่มหนึ่ง', 'на один больше'],
     remove: ['빼기', 'remove', '删除', 'xóa', 'ลบ', 'удалить'],
     etc: ['기타', 'Other', '其他', 'Khác', 'อื่น ๆ', 'Прочее'],
+    otherRegion: ['지역을 바꾸기 전 답변이에요. 지금 지역에서 다시 물어봐 주세요.', 'This answer is for the previous area. Please ask again for the current area.', '这是更改地区之前的回答，请在当前地区重新询问。', 'Đây là câu trả lời cho khu vực trước. Vui lòng hỏi lại cho khu vực hiện tại.', 'คำตอบนี้เป็นของพื้นที่ก่อนหน้า กรุณาถามใหม่สำหรับพื้นที่ปัจจุบัน', 'Это ответ для прежнего района. Спросите снова для текущего района.'],
     home: ['처음으로', 'Home', '首页', 'Trang đầu', 'หน้าแรก', 'В начало'],
     chatLog: ['대화', 'Conversation', '对话', 'Hội thoại', 'บทสนทนา', 'Диалог'],
     suggest: ['추천', 'Suggestions', '推荐', 'Gợi ý', 'คำแนะนำ', 'Подсказки'],
