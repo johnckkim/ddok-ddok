@@ -54,6 +54,10 @@ def _local_analog(q, local):
 
 
 E.local_head = _local_head
+# 품목 토큰은 집합이라 꺼내는 순서가 프로세스마다 달랐다(PYTHONHASHSEED). 지역 금액 수준 k·상위어 고르기가
+# 서버 인스턴스마다 달라져 같은 질문에 다른 금액이 나오던 문제 → 긴 토큰부터 정렬한 튜플로 고정한다.
+_tokens_set = E.tokens
+E.tokens = lambda name: tuple(sorted(_tokens_set(name), key=lambda t: (-len(t), t)))
 E.local_analog = _local_analog
 # 엔진 유사품목 사전 보강(엔진 파일은 건드리지 않고 여기서 더한다)
 # 검수에서 엉뚱하다고 본 유사품목 짝은 뺀다(EQUIV 순서 규칙으로 옮겼거나 확인 후 안내가 낫다)
@@ -488,6 +492,14 @@ def _fit_rows(q, rows):
     return base if base and len(base) < len(out) else out      # '추가 시' 줄은 기본 줄이 있으면 뺀다
 
 
+def _region_has(c, word):
+    # 이 지역 조례·확정표 어느 줄에 그 말이 들어 있는가(그 종류를 따로 값 매기는 지역인지)
+    for x in list(c.local) + list(c.conf):
+        if word in re.sub(r'\s', '', ' '.join(str(x.get(k) or '') for k in ('name', 'disp_item', 'spec', 'disp_spec', 'item'))):
+            return True
+    return False
+
+
 def resolve(c, q, label=None, expr=None):
     """품목명 1개 → {'kind': 'rows'|'pending'|'ask', rows, result(내부), names(ask일 때 후보)}"""
     res = _resolve(c, q, label, expr)
@@ -498,8 +510,9 @@ def resolve(c, q, label=None, expr=None):
         if res['kind'] == 'rows' and any(k in path for k in _INDIRECT):
             kept = _fit_rows(expr or q, res['rows'])
             qn = re.sub(r'\s', '', expr or q) + '|' + E.norm(expr or q)
-            want = [t for t in ('2층', '이층', '벙커', '돌', '흙', '옥', '황토', '안마', '업소', '영업', '쌍둥이', '접이식', '대리석')
+            want = [t for t in ('2층', '이층', '벙커', '돌', '흙', '옥', '황토', '안마', '업소', '영업', '대리석')
                     if t in qn]                           # 다른 종류를 뜻하는 앞말만(드럼세탁기는 세탁기 크기로 충분)
+            want += [t for t in ('접이식', '쌍둥이') if t in qn and _region_has(c, t)]   # 꾸밈말은 이 지역 조례가 따로 값을 매길 때만
             if kept and want and not any(t in re.sub(r'\s', '', str(o.get('spec')) + str(o.get('src') or '')) for o in kept for t in want):
                 kept = []                                 # '2층침대'인데 2층 줄이 없으면 일반침대로 답하지 않는다
             if not kept:

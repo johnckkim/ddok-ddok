@@ -726,3 +726,28 @@ def test_filtered_rows_never_come_back_as_estimate():
     res = {'kind': 'pending', 'rows': [{'item': '퀸침대', 'spec': '2층 침대', 'fee': 19000}],
            'result': {'등급': 'L2 유사품목', '경로': '상위어 접이식 침대 (맞는 규격 없음)'}}
     assert S._engine_estimate(S.ctx('gwacheon'), '퀸침대', res) is None
+
+
+def test_modifier_type_only_when_region_prices_it():
+    """'접이식'처럼 꾸미는 말은 그 지역 조례가 따로 값을 매길 때만 따진다(없으면 빨래건조대 줄로 답한다)."""
+    from server import service as S
+
+    class R:
+        pass
+    c = R()
+    c.local = [{'name': '빨래건조대', 'spec': '모든규격', 'disp_item': '', 'disp_spec': ''}]
+    c.conf = []
+    assert not S._region_has(c, '접이식')
+    c.local.append({'name': '의자', 'spec': '접이식', 'disp_item': '', 'disp_spec': ''})
+    assert S._region_has(c, '접이식')
+
+
+def test_tokens_order_is_fixed():
+    """토큰 순서가 프로세스(해시 시드)마다 달라 지역 금액 수준 k가 바뀌던 문제: 정렬된 튜플이어야 한다."""
+    import subprocess, sys, os
+    code = ("from server import service as S; from engine import engine as E;"
+            "print(E.tokens('책장,진열장,장식장,수납장 tv 다이'))")
+    outs = {subprocess.run([sys.executable, '-c', code], capture_output=True, text=True, encoding='utf-8',
+                           env=dict(os.environ, PYTHONHASHSEED=str(s), PYTHONIOENCODING='utf-8'),
+                           cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__)))).stdout for s in (1, 2, 3)}
+    assert len(outs) == 1 and outs.pop().startswith('(')
