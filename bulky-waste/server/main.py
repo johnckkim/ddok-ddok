@@ -87,6 +87,18 @@ async def quote(request: Request):
     return await run_in_threadpool(S.quote, muni, items)
 
 
+@app.post('/api/translate')
+async def translate(request: Request):
+    """화면 글 번역(우리동네플러스 지원 언어). {lang, texts[]} → {texts[]}. 실패한 칸은 원문 그대로."""
+    rate_limit(request, 'translate')
+    b = await request.json()
+    lang = str(b.get('lang') or '')
+    texts = b.get('texts') or []
+    if lang not in ai.LANGS or not isinstance(texts, list):
+        raise HTTPException(400, 'lang, texts 를 확인해 주세요')
+    return {'texts': await run_in_threadpool(ai.translate, texts[:60], lang)}
+
+
 @app.post('/api/confirm/{card_id}')
 async def confirm(card_id: str, request: Request):
     rate_limit(request, 'confirm')

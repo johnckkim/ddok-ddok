@@ -613,6 +613,7 @@ def _ai_rescue(c, name):
         return None
     clean = lambda n: re.sub(r'\s*\(\d+\)\s*', ' ', n or '').strip()
     names = [clean(x['disp_item'] or x['name']) for x in c.local] + [x['name'] for x in c.conf]
+    names = [n for n in names if not C.CATCH_ALL.search(n)]      # 나무류·플라스틱류 같은 재질 묶음은 물건의 크기 기준이 아님
     picks = ai.pick_items(c.muni, c.name, name, names)
     ok = []
     for p in picks:
@@ -776,7 +777,7 @@ def _finish(c, expr, d, size=None, label=None, as_item=False):
     if res['kind'] == 'rows':
         rows = res['rows']
         if as_item:      # AI가 고른 조례 항목: 고객이 쓴 이름 + '○○ 항목으로 배출'
-            rows = [dict(o, note=o.get('note') or f"‘{d['label']}’ 항목으로 배출") for o in rows]
+            rows = [dict(o, note=f"‘{d['label']}’ 항목으로 배출") for o in rows]   # '현행 조례 품목'보다 어느 항목인지가 먼저
         if size:
             pick = [o for o in rows if o['spec'] == size]
             rows = pick or rows

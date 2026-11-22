@@ -4,7 +4,7 @@ import collections, os, time
 from fastapi import HTTPException
 
 _HITS = collections.defaultdict(collections.deque)
-LIMITS = {'quote': (40, 60), 'confirm': (40, 60), 'login': (10, 600), 'ticket': (60, 60), 'contact': (10, 600)}
+LIMITS = {'quote': (40, 60), 'translate': (60, 60), 'confirm': (40, 60), 'login': (10, 600), 'ticket': (60, 60), 'contact': (10, 600)}
 
 
 def client_ip(request):

@@ -206,3 +206,54 @@ def pick_items(muni_key, muni_name, item, names):
         return []
     _cache(key, got)
     return got
+
+
+# ================================================================ 다국어(우리동네플러스 지원 언어)
+LANGS = {'ko': 'Korean', 'en': 'English', 'zh': 'Simplified Chinese', 'vi': 'Vietnamese', 'th': 'Thai', 'ru': 'Russian'}
+TR_PROMPT = """You translate short texts for a Korean local-government app that tells residents the sticker fee for throwing away bulky waste (대형폐기물: furniture, appliances, etc.).
+Translate each string in the JSON array into {target}. Rules:
+- Keep numbers, sizes and units exactly (cm, m, kg, ℓ, L, ㎡, mm, 인치→inch). Keep '~', '×', '+' as they are.
+- Item names: use the plain everyday name a resident would use. Korean place names: give the common romanized/official name (e.g. 경기도 과천시 → Gwacheon-si, Gyeonggi-do).
+- Fees in won stay numeric. Do not add explanations, do not merge or split strings.
+- If a string is already in {target}, return it unchanged.
+Return ONLY a JSON array of {n} strings, same order.
+{texts}"""
+
+
+def translate(texts, lang):
+    """texts → 같은 길이 목록. lang 은 LANGS 키('ko'면 다른 언어 입력을 한국어로). 실패한 칸은 원문."""
+    texts = [str(t or '')[:300] for t in texts][:60]
+    if lang not in LANGS or not texts:
+        return texts
+    out, todo = list(texts), []
+    for i, t in enumerate(texts):
+        if not t.strip() or (lang != 'ko' and not re.search(r'[가-힣]', t)):
+            continue                                   # 한글이 없는 칸(숫자·이미 번역된 글)은 그대로
+        if lang == 'ko' and re.search(r'[가-힣]', t) and not re.search(r'[A-Za-zЀ-ӿ฀-๿一-鿿]', t):
+            continue                                   # 이미 한국어
+        hit = _cache(f'tr:{lang}:{t}')
+        if hit is not None:
+            out[i] = hit
+        else:
+            todo.append(i)
+    if todo and available():
+        uniq = list(dict.fromkeys(texts[i] for i in todo))
+        for s in range(0, len(uniq), 30):
+            part = uniq[s:s + 30]
+            try:
+                prompt = TR_PROMPT.format(target=LANGS[lang], n=len(part), texts=json.dumps(part, ensure_ascii=False))
+                text = _TEST[0](prompt) if _TEST else _chat(prompt)
+                j = text.find('[')
+                arr = json.JSONDecoder().raw_decode(text[j:])[0] if j >= 0 else None
+                if not isinstance(arr, list) or len(arr) != len(part):
+                    raise ValueError('번역 개수 불일치')
+                for src, dst in zip(part, arr):
+                    dst = str(dst or '').strip()[:300]
+                    if dst:
+                        _cache(f'tr:{lang}:{src}', dst)
+                        for i in todo:
+                            if texts[i] == src:
+                                out[i] = dst
+            except Exception as e:
+                LAST['error'] = f'translate: {type(e).__name__}: {e}'[:300]
+    return out

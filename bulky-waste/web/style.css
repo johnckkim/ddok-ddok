@@ -319,3 +319,17 @@ table.fees tr.same td.item::after { content: "〃"; color: var(--ink-3); }
   .top-r .muni-pill small { display: none; }
   .cart-pill { padding: 6px 10px; }
 }
+
+/* 언어(국기) */
+.lang { position: relative; flex: none; }
+.lang-btn { display: grid; place-items: center; width: 40px; height: 36px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel); cursor: pointer; padding: 0; }
+.lang-btn .flag, .lang-menu .flag { width: 24px; height: 16px; border-radius: 2px; box-shadow: 0 0 0 1px rgba(0,0,0,.12); display: block; }
+.lang-menu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 20; list-style: none; margin: 0; padding: 6px; min-width: 168px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); }
+.lang-menu[hidden] { display: none; }
+.lang-menu button { display: flex; align-items: center; gap: 10px; width: 100%; font: inherit; font-size: 15px; color: var(--ink); background: transparent;
+  border: 0; border-radius: 8px; padding: 8px 10px; min-height: 40px; cursor: pointer; text-align: left; }
+.lang-menu button:hover, .lang-menu button[aria-checked="true"] { background: var(--brand-soft); color: var(--brand); font-weight: 700; }
+.msg small.ko { display: block; font-weight: 500; font-size: 12px; color: var(--ink-3); }
+.msg .cartlist small.ko { display: inline; }
+@media (max-width: 420px) { .lang-btn { width: 36px; } }
