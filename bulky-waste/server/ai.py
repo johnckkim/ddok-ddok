@@ -73,7 +73,7 @@ def _anthropic(prompt):
     """ANTHROPIC_API_KEY 가 있으면 Claude API를 바로 쓴다(빠르고 판단이 좋다)."""
     m = os.environ.get('ANTHROPIC_MODEL', 'claude-haiku-5-5')
     req = urllib.request.Request('https://api.anthropic.com/v1/messages', method='POST', data=json.dumps({
-        'model': m, 'max_tokens': 300, 'messages': [{'role': 'user', 'content': prompt}]}).encode(),
+        'model': m, 'max_tokens': 1024, 'thinking': {'type': 'disabled'}, 'messages': [{'role': 'user', 'content': prompt}]}).encode(),
         headers={'x-api-key': os.environ['ANTHROPIC_API_KEY'], 'anthropic-version': '2023-06-01', 'content-type': 'application/json'})
     with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
         out = json.loads(r.read().decode('utf-8'))
