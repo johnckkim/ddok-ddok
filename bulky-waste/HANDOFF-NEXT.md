@@ -36,7 +36,7 @@
 | ADMIN_PASSWORD, SECRET_KEY, CRON_SECRET | 설정됨 | 운영자 로그인·서명·배치 |
 | BLOB_READ_WRITE_TOKEN | 설정됨 | DB 스냅숏 |
 | AI_GATEWAY_API_KEY | 설정됨 | AI Gateway (무료 등급: Claude 불가, gemini-2.5-flash 7~11초) |
-| ANTHROPIC_API_KEY | **없음** | 넣으면 Claude Haiku 직접 호출(1~2초, 더 정확). 코드 준비 완료 |
+| ANTHROPIC_API_KEY | 설정됨(2026-11-22, Production) | Claude Haiku 5.5 직접 호출(effort low, 1~3초). `temperature` 금지(400). 실패 시 AI Gateway로 넘어가고 `/api/cron/ai` 의 `anthropic` 칸에 이유 표시 |
 | NAVER_CLIENT_ID / NAVER_CLIENT_SECRET | **없음** | 쇼핑 검색. 신규 앱 등록 화면에 '검색' API가 없어 발급 못 함 |
 | COUPANG_ACCESS_KEY / COUPANG_SECRET_KEY | **없음** | 파트너스 계정이 Open API 미승인(빈 화면) |
 
