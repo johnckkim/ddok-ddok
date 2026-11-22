@@ -469,3 +469,10 @@ def test_import_collected_rules(tmp_path):
     assert {x['file'] for x in r['rejected']} == {'서울_블로그구.csv', '서울_작은구.csv'}
     j = cust('post', '/api/quote', json={'municipality': r['imported'][0]['code'], 'items': [{'name': '폐가전'}]}).json()
     assert j['rows'][0]['수수료'] == '무상수거'
+
+
+def test_bed_bumper_expressions():
+    for q in ('베드 범퍼', '베드범퍼', '범퍼침대', '침대 범퍼'):
+        j = quote(q)
+        assert j['rows'] and j['pending'] == [] and j['rows'][0]['수수료'] == '3,000원', (q, j)
+    assert rows_of(quote('소파베드'))[0][2] == '10,000원'          # 베드→침대 바꿔도 기존 확정표 그대로

@@ -50,7 +50,7 @@ def _apply_dictionary():
             vag.add(e)
         elif r['kind'] == 'HINT' and r['target']:
             hints.append((e, [t.strip() for t in re.split(r'[,\s]+', r['target']) if t.strip()]))
-    E.SYN[:] = BASE_SYN + syn
+    E.SYN[:] = BASE_SYN + [(a, b) for a, b in C.APP_SYN] + syn
     E.AMBIG = BASE_AMBIG + tuple(amb)
     E.VAGUE = BASE_VAGUE | vag
     return {a for a, _ in syn}, hints
@@ -247,6 +247,15 @@ def resolve(c, q, label=None, expr=None):
     multi = _multi_confirmed(c, q, r)
     if multi:
         return {'kind': 'ask', 'rows': [], 'result': r, 'names': multi}
+    if r['등급'].startswith('L4') and ' ' in q and not expr:
+        # 근거가 전혀 없는 여러 낱말 표현('베드 범퍼')은 끝말('범퍼')이 조례·확정표에 있으면 그 금액을 쓴다
+        head = q.split()[-1]
+        if len(head) >= 2:
+            r2 = engine_price(c, head)
+            if r2['등급'].startswith(('L0', 'L1')) and not r2.get('확인') and not _multi_confirmed(c, head, r2):
+                rows2, review2 = _rows_for(c, head, r2, label)
+                if rows2 and not review2:
+                    return {'kind': 'rows', 'rows': rows2, 'result': dict(r2, 품목=q, 경로=f"끝말 '{head}'로 찾음"), 'review': False}
     rows, review = _rows_for(c, q, r, label)
     if review and c.policy != 'show':
         return {'kind': 'pending', 'rows': rows, 'result': r, 'review': True}
