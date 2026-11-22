@@ -519,9 +519,12 @@ def _ref_scaled(c, q, label):
     ratio = (c.k or 1.0) / (g.k or 1.0)
     fees = [r['fee'] for r in c.local]
     grid = sorted({f for f in fees if fees.count(f) >= 2}) or c.grid      # 그 지역에서 두 번 이상 쓰는 금액 단계
-    out = []
+    out, prev = [], None
     for o in rg['rows']:
         fee = E.snap(o['fee'] * ratio, grid)
+        if prev and o['fee'] > prev[0] and fee <= prev[1]:            # 큰 규격이 더 비쌌으면 환산 뒤에도 한 단계 위
+            fee = min([g for g in grid if g > prev[1]] or [fee])
+        prev = (o['fee'], fee)
         out.append({'item': label, 'spec': o['spec'], 'fee': fee, 'note': ''})
     return out
 
