@@ -381,8 +381,6 @@ def test_cron_requires_secret():
 
 # ------------------------------------------------------------------ 2. 금지어(마지막에 모든 고객 응답 일괄 검사)
 def test_customer_pages_and_static_clean():
-    for u in ('/', '/static/app.js', '/static/style.css', '/static/icon.svg', '/api/municipalities', '/api/health'):
-        pass
     for u in ('/static/udong.png', '/static/udong-512.png'):
         assert client.get(u).status_code == 200 and client.get(u).headers['content-type'] == 'image/png'
     for u in ('/', '/static/app.js', '/static/style.css', '/api/municipalities', '/api/health'):
