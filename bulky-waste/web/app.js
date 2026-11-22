@@ -87,8 +87,10 @@
   }
   function askPlace(again) {
     $('#muniPill').hidden = true;
-    addBot(again ? '지자체를 바꿀게요. <b>거주하고 계신 지자체명</b>을 입력해 주세요.'
-      : '안녕하세요! 대형폐기물 수수료를 알려드릴게요.<br>먼저 <b>거주하고 계신 지자체명</b>을 입력해 주세요.');
+    var last = MUNIS.filter(function (m) { return m.code === store('bw.muni'); })[0];
+    addBot((again ? '지자체를 바꿀게요. <b>거주하고 계신 지자체명</b>을 입력해 주세요.'
+      : '안녕하세요! 대형폐기물 수수료를 알려드릴게요.<br>먼저 <b>거주하고 계신 지자체명</b>을 입력해 주세요.') +
+      (last ? '<div class="chips"><button type="button" data-place="' + esc(last.code) + '">' + esc(last.name) + '</button></div>' : ''));
     setMode('place');
   }
   function setMuni(m, quiet) {
@@ -129,6 +131,8 @@
     sendItems(splitNames(text), text);
   });
   thread.addEventListener('click', function (e) {
+    var pl = e.target.closest('[data-place]');
+    if (pl && state.mode === 'place') { setMuni(MUNIS.filter(function (m) { return m.code === pl.dataset.place; })[0]); return; }
     var b = e.target.closest('[data-send]');
     if (b && state.mode === 'items' && !state.busy) sendItems([b.dataset.send], b.dataset.send);
   });
@@ -375,10 +379,10 @@
   api('/api/municipalities').then(function (j) {
     MUNIS = j.items;
     var sp = new URLSearchParams(location.search);
-    var want = sp.get('m') || store('bw.muni');
-    var hit = MUNIS.filter(function (m) { return m.code === want; })[0];
+    var hit = MUNIS.filter(function (m) { return m.code === sp.get('m'); })[0];
     if (sp.get('t')) showTicket(sp.get('t'));
-    if (hit) setMuni(hit, true); else askPlace(false);
+    askPlace(false);                      // 시작 질문은 항상 지역
+    if (hit) setMuni(hit);                // 공유 링크(?m=)는 그 지역으로 바로 답한 것처럼 이어간다
     var qq = sp.get('q');
     if (qq && hit) sendItems(splitNames(qq), qq);
   }).catch(function () { addBot('잠시 후 다시 시도해 주세요.'); });

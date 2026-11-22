@@ -37,6 +37,11 @@ def main():
             if sw > cw or tw > bw: ok = False; print('  ✗ 가로 스크롤')
             if OUT: pg.screenshot(path=os.path.join(OUT, f'{name}_3_result.png'), full_page=True)
             pg.fill('#input', '다이슨'); pg.press('#input', 'Enter')
+            # 새로 열어도 시작 질문은 항상 지역(전에 고른 지역은 버튼으로만)
+            pg2 = ctx.new_page(); pg2.goto(BASE + '/'); pg2.wait_for_selector('.msg.bot [data-place]')
+            assert '거주하고 계신 지자체명' in pg2.inner_text('.msg.bot') and pg2.query_selector('.msg.result') is None
+            assert pg2.get_attribute('#input', 'placeholder').startswith('거주하고 계신')
+            pg2.close()
             pg.wait_for_selector('.msg.card .opt')
             pg.click('.msg.card .opt >> nth=0')
             for _ in range(60):
