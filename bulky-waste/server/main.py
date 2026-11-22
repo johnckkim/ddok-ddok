@@ -145,7 +145,19 @@ async def quote_export(request: Request):
 
 @app.get('/api/health')
 def health():
-    return {'ok': True, 'sync': store.SYNC.enabled}
+    return {'ok': True, 'sync': store.SYNC.enabled, 'sync_ok': store.SYNC.error is None,
+            'restored': store.SYNC.current is not None}
+
+
+@app.get('/api/quote')
+def quote_get(request: Request, q: str = '', m: str = 'gwacheon'):
+    """공유 링크용: /api/quote?q=식기세척기,캣타워 (POST /api/quote 와 같은 응답)"""
+    rate_limit(request, 'quote')
+    names = [x.strip() for x in re.split(r'[,\n]', q) if x.strip()]
+    if not names:
+        raise HTTPException(400, '품목 이름을 입력해 주세요')
+    _muni_ok(m)
+    return S.quote(m, [{'name': n} for n in names])
 
 
 @app.get('/api/cron/national')

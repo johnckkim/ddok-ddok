@@ -354,7 +354,10 @@
   }
 
   loadMunis().then(function () {
-    var t = new URLSearchParams(location.search).get('t');
+    var sp = new URLSearchParams(location.search);
+    var t = sp.get('t');
     if (t) showTicket(t);
+    var qq = sp.get('q');
+    if (qq) { addItems(splitNames(qq)); $('#ask').requestSubmit ? $('#ask').requestSubmit() : $('#go').click(); }
   }).catch(function () { toast('잠시 후 다시 시도해 주세요.'); });
 })();

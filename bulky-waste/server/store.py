@@ -82,6 +82,7 @@ class BlobSync:
             return True
         except Exception as e:  # 원격이 잠시 안 돼도 서비스는 로컬 DB로 계속
             self.error = f'{type(e).__name__}: {e}'
+            print('[blob pull]', self.error, flush=True)
             return False
 
     def push(self):
@@ -105,6 +106,7 @@ class BlobSync:
             self.error = None
         except Exception as e:
             self.error = f'{type(e).__name__}: {e}'
+            print('[blob push]', self.error, flush=True)
 
 
 SYNC = BlobSync()
