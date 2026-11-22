@@ -47,7 +47,10 @@
 ## 5. 점검용 주소 (CRON_SECRET 필요)
 - AI 점검: `/api/cron/ai?key=…&q=베드 범퍼&m=seoul-eunpyeong` (모델·고른 품목·시도 기록·견적 결과)
   - 모델별 비교: `&models=google/gemini-2.5-flash,openai/gpt-5-mini`
-- 수집표 반영: `/api/cron/import?key=…&mode=collected&dry=0&force=1`
+- 수집표 반영: `/api/cron/import?key=…&mode=collected&dry=0&force=1&only=강원_삼척시,전남_곡성군` (only = data/collected 파일 이름, force 를 그 파일에만)
+  - 배포 직후(이전 인스턴스가 남은 동안) 돌리면 일부 인스턴스 DB가 늦게 맞춰진다 → 배포가 자리 잡은 뒤 실행하고, 끝나면 그 지역 견적을 두세 번 확인
+  - 2026-11-23: 삼척·양양·영덕·익산·완도·평창·고창·울진 8곳을 조례 별표(삼척은 시 신청사이트)로 교체(규격 복원). 평창은 2026-10-08 개정 조례라 공공데이터보다 금액이 높다
+- 답변 일관성: 품목 토큰은 service.py 에서 정렬 튜플로 고정(E.tokens 덮어쓰기). 집합 순서가 인스턴스마다 달라 같은 질문에 금액이 다르던 문제. 엔진에서 set 을 순회해 첫 값을 고르는 코드를 새로 쓰지 말 것
 - 공공데이터 반영: `/api/cron/import?key=…&targets=서울 전체, 경기 전체&dry=0`
 
 ## 6. 다음 할 일 (우선순위)
