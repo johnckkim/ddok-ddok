@@ -284,7 +284,7 @@ def admin_page():
     return _page('admin.html')
 
 
-_STATIC = {'app.js', 'admin.js', 'style.css', 'admin.css', 'udong.png', 'udong-512.png', 'manifest.webmanifest'}
+_STATIC = {'app.js', 'i18n.js', 'admin.js', 'style.css', 'admin.css', 'udong.png', 'udong-512.png', 'manifest.webmanifest'}
 
 
 @app.get('/static/{name}')

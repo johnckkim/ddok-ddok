@@ -383,7 +383,7 @@ def test_cron_requires_secret():
 def test_customer_pages_and_static_clean():
     for u in ('/static/udong.png', '/static/udong-512.png'):
         assert client.get(u).status_code == 200 and client.get(u).headers['content-type'] == 'image/png'
-    for u in ('/', '/static/app.js', '/static/style.css', '/api/municipalities', '/api/health'):
+    for u in ('/', '/static/app.js', '/static/i18n.js', '/static/style.css', '/api/municipalities', '/api/health'):
         r = cust('get', u)
         assert r.status_code == 200, u
     big = quote('매트리스 토퍼', '유아용 쿠션', '공기청정기 필터', '덤벨', '절구', '파라솔', '냉장고', 'TV', '에어컨', '책장', '의자', '스키',
@@ -579,3 +579,27 @@ def test_unclear_specs_go_to_review():
     rows = [{'item': '냉장고', 'spec': '모든규격', 'fee': 5000}, {'item': '냉장고', 'spec': '모든규격', 'fee': 7000}]
     assert S._unclear(rows)
     assert not S._unclear([{'item': '냉장고', 'spec': '300L 미만', 'fee': 5000}, {'item': '냉장고', 'spec': '300L 이상', 'fee': 7000}])
+
+
+def test_translate_endpoint_and_cache():
+    """다국어: 한글 칸만 번역해 캐시하고, 번역 실패·개수 불일치면 원문을 돌려준다."""
+    from server import ai
+    calls = []
+
+    def fake(prompt):
+        calls.append(prompt)
+        import json as _j, re as _r
+        arr = _j.loads(prompt[prompt.rindex('['):])
+        return _j.dumps(['EN:' + x for x in arr], ensure_ascii=False)
+    ai._TEST[:] = [fake]
+    try:
+        r = client.post('/api/translate', json={'lang': 'en', 'texts': ['소파', '1인용', '3,000', '']})
+        assert r.status_code == 200 and r.json()['texts'] == ['EN:소파', 'EN:1인용', '3,000', '']
+        n = len(calls)
+        assert client.post('/api/translate', json={'lang': 'en', 'texts': ['소파']}).json()['texts'] == ['EN:소파']
+        assert len(calls) == n                                   # 두 번째는 캐시
+        ai._TEST[:] = [lambda p: '["하나뿐"]']
+        assert client.post('/api/translate', json={'lang': 'vi', 'texts': ['냉장고', '책상']}).json()['texts'] == ['냉장고', '책상']
+        assert client.post('/api/translate', json={'lang': 'xx', 'texts': ['소파']}).status_code == 400
+    finally:
+        ai._TEST[:] = []
