@@ -108,7 +108,12 @@ def pick_items(muni_key, muni_name, item, names):
         got = [n for n in (js.get('items') or []) if isinstance(n, str) and n in names][:3]
         LAST['error'] = ''
     except Exception as e:
-        LAST['error'] = f'{type(e).__name__}: {e}'[:300]
+        body = ''
+        try:
+            body = e.read().decode('utf-8', 'replace')[:400] if hasattr(e, 'read') else ''
+        except Exception:
+            pass
+        LAST['error'] = f'{type(e).__name__}: {e} {body}'[:600]
         return []
     _cache(key, got)
     return got
