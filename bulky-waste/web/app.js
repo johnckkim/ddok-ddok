@@ -22,7 +22,7 @@
       method: body ? 'POST' : 'GET',
       headers: body ? { 'Content-Type': 'application/json' } : {},
       body: body ? JSON.stringify(body) : undefined
-    }).then(function (r) {
+    }).catch(function () { throw new Error(t('offline')); }).then(function (r) {
       return r.json().catch(function () { return {}; }).then(function (j) {
         if (!r.ok) throw new Error(j.message || t('tryLater'));
         if (j && j.tk) I.addTags(j.tk);
@@ -41,9 +41,10 @@
   function won(n) { return ko() ? n.toLocaleString('ko-KR') + '원' : '₩' + n.toLocaleString('en-US'); }
   function feeNum(fee) { return /^[\d,]+원$/.test(String(fee || '')) ? +String(fee).replace(/[^\d]/g, '') : null; }
   function flat(s) { return String(s || '').replace(/[\s\-–·.,]+/g, '').toLowerCase(); }
-  function splitNames(s) {
-    return String(s || '').split(/[,\n、，;]+/).map(function (x) { return x.trim(); }).filter(Boolean).slice(0, 30);
+  function allNames(s) {
+    return String(s || '').split(/[,\n、，;]+/).map(function (x) { return x.trim(); }).filter(Boolean);
   }
+  function splitNames(s) { return allNames(s).slice(0, 30); }
 
   /* ---------- 언어 ---------- */
   function applyStatic() {
@@ -53,7 +54,7 @@
     document.querySelectorAll('[data-t-aria]').forEach(function (el) { el.setAttribute('aria-label', t(el.dataset.tAria)); });
     $('#langBtn').innerHTML = I.flag(I.lang()) + '<span class="sr">' + esc(t('language')) + '</span>';
     $('#langMenu').innerHTML = I.LANGS.map(function (l) {
-      return '<li><button type="button" role="menuitemradio" aria-checked="' + (l.code === I.lang()) + '" data-lang="' + l.code + '">' +
+      return '<li><button type="button" aria-pressed="' + (l.code === I.lang()) + '" data-lang="' + l.code + '">' +
         I.flag(l.code) + '<span>' + esc(l.name) + '</span></button></li>';
     }).join('');
     setMode(state.mode, true);
@@ -65,7 +66,9 @@
     $('#langMenu').hidden = !open; $('#langBtn').setAttribute('aria-expanded', String(open));
   });
   document.addEventListener('click', function (e) { if (!e.target.closest('#langWrap')) closeLang(); });
-  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeLang(); });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && !$('#langMenu').hidden) { closeLang(); $('#langBtn').focus(); }
+  });
   $('#langMenu').addEventListener('click', function (e) {
     var b = e.target.closest('[data-lang]'); if (!b) return;
     closeLang();
@@ -87,7 +90,8 @@
   var thread = $('#thread');
   var chat = $('#chat');
   function scrollEnd(instant) {
-    requestAnimationFrame(function () { chat.scrollTo({ top: chat.scrollHeight, behavior: instant ? 'auto' : 'smooth' }); });
+    var calm = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    requestAnimationFrame(function () { chat.scrollTo({ top: chat.scrollHeight, behavior: instant || calm ? 'auto' : 'smooth' }); });
   }
   /* 키보드가 올라오면 보이는 높이(visualViewport)에 화면을 맞춰 입력창이 항상 키보드 위에 오게 한다 */
   function fitViewport() {
@@ -177,6 +181,7 @@
     }
     state.muni = m.code; state.muniName = m.name; state.muniDisp = m.disp || m.name;
     $('#muniName').textContent = state.muniDisp; $('#muniPill').hidden = false;
+    $('#muniPill').setAttribute('aria-label', t('regionChange', { m: state.muniDisp }));
     if (!quiet) addUser(state.muniDisp);
     setMode('items');
     var w = state.waiting; state.waiting = null;
@@ -203,10 +208,12 @@
   $('#composer').addEventListener('submit', function (e) {
     e.preventDefault();
     var text = $('#input').value.trim();
-    if (!text || state.busy) return;
+    if (state.busy) { if (text) toast(t('busy')); return; }
+    if (!text) return;
     if (state.mode === 'place') {
       var list = matches(text);
       if (list.length) { setMuni(list[0]); return; }
+      if (!MUNIS.length) { start(); return; }       // 지역 목록을 못 불러온 상태: 다시 불러온다
       addUser(text); $('#input').value = ''; renderSuggest();
       /* 지역 이름처럼 보이면 '안내하지 않는 지역', 아니면(품목을 먼저 물으면) 지역부터 묻고 품목은 기억했다가 이어서 답한다 */
       var miss = function (k) {
@@ -222,7 +229,12 @@
       });
       return;
     }
-    sendItems(splitNames(text), text);
+    var names = allNames(text);
+    sendItems(names.slice(0, 30), names.length > 30 ? names.slice(0, 30).join(', ') : text);
+    if (names.length > 30) {                   // 30개까지만 보내고 나머지는 입력창에 남긴다
+      setTimeout(function () { $('#input').value = names.slice(30).join(', '); }, 0);
+      toast(t('tooMany', { n: names.length - 30 }));
+    }
   });
   thread.addEventListener('click', function (e) {
     var pl = e.target.closest('[data-place]');
@@ -497,6 +509,7 @@
   function renderCart() {
     var n = state.cart.reduce(function (a, c) { return a + c.qty; }, 0);
     $('#cartN').textContent = n; $('#cartBtn').hidden = !n;
+    $('#cartBtn').setAttribute('aria-label', t('cartCount', { n: n }));
     if (state.cartEl) {
       if (state.cartEl.isConnected) state.cartEl.querySelector('.bubble').innerHTML = cartHTML();
       else state.cartEl = null;
@@ -661,6 +674,7 @@
     el.classList.add('done');
     el.querySelectorAll('button, input, textarea').forEach(function (b) { b.disabled = true; });
     addUser(said);
+    state.busy = true; $('#send').disabled = true;
     var tp = typing();
     var go = body.answer === 'other' && body.text && !hasHangul(body.text)
       ? I.tr([body.text], 'ko').then(function (a) { body.text = a[0]; }) : Promise.resolve();
@@ -678,7 +692,8 @@
         });
       }
       return localize(j).then(function (jj) { tp.remove(); answer(jj); });
-    }).catch(function (err) { errMsg(err).then(function (m) { tp.remove(); addBot(esc(m)); }); });
+    }).catch(function (err) { errMsg(err).then(function (m) { tp.remove(); addBot(esc(m)); }); })
+      .then(function () { state.busy = false; $('#send').disabled = false; });
   }
   function shrink(file, cb) {
     var r = new FileReader();
@@ -708,30 +723,40 @@
         if (j.closed && j.closed.length) h += '<p class="sub">' + esc(t('closed', { x: tr(j.closed) })) + '</p>';
         addBot(h);
       });
-    }).catch(function (err) { toast(err.message); });
+    }).catch(function (err) { errMsg(err).then(toast); });
   }
 
   /* ---------- 시작 ---------- */
   applyStatic();
+  var started = false;
+  function start() {
   api('/api/municipalities').then(function (j) {
-    MUNIS = j.items;
-    MUNIS.forEach(function (m) { m.disp = m.name; });
-    // 첫 질문은 바로 띄우고, 지역 이름 번역은 뒤에서(오래 걸려도 기다리게 하지 않는다)
-    var first = ko() ? Promise.resolve() : Promise.race([prepareMunis(), new Promise(function (r) { setTimeout(r, 1500); })]);
-    return first.then(function () {
-      if (!ko()) prepareMunis().then(function () {
-        var chip = document.querySelector('[data-place="gwacheon"]');
-        var g = MUNIS.filter(function (m) { return m.code === 'gwacheon'; })[0];
-        if (chip && g) chip.textContent = g.disp || g.name;
-        if (state.muni) { var m = MUNIS.filter(function (x) { return x.code === state.muni; })[0]; if (m) { state.muniDisp = m.disp; $('#muniName').textContent = m.disp; } }
+      if (started) return;
+      MUNIS = j.items || [];
+      if (!MUNIS.length) throw new Error('empty');
+      started = true;
+      MUNIS.forEach(function (m) { m.disp = m.name; });
+      // 첫 질문은 바로 띄우고, 지역 이름 번역은 뒤에서(오래 걸려도 기다리게 하지 않는다)
+      var first = ko() ? Promise.resolve() : Promise.race([prepareMunis(), new Promise(function (r) { setTimeout(r, 1500); })]);
+      return first.then(function () {
+        if (!ko()) prepareMunis().then(function () {
+          var chip = document.querySelector('[data-place="gwacheon"]');
+          var g = MUNIS.filter(function (m) { return m.code === 'gwacheon'; })[0];
+          if (chip && g) chip.textContent = g.disp || g.name;
+          if (state.muni) { var m = MUNIS.filter(function (x) { return x.code === state.muni; })[0]; if (m) { state.muniDisp = m.disp; $('#muniName').textContent = m.disp; } }
+        });
+        var sp = new URLSearchParams(location.search);
+        var hit = MUNIS.filter(function (m) { return m.code === sp.get('m'); })[0];
+        if (sp.get('t')) showTicket(sp.get('t'));
+        askPlace(false);                      // 시작 질문은 항상 지역
+        var qq = sp.get('q');
+        if (hit && qq) state.waiting = qq;    // 공유 링크(?m=&q=): 인사 다음에 그 품목을 이어서 답한다
+        if (hit) setMuni(hit);
       });
-      var sp = new URLSearchParams(location.search);
-      var hit = MUNIS.filter(function (m) { return m.code === sp.get('m'); })[0];
-      if (sp.get('t')) showTicket(sp.get('t'));
-      askPlace(false);                      // 시작 질문은 항상 지역
-      var qq = sp.get('q');
-      if (hit && qq) state.waiting = qq;    // 공유 링크(?m=&q=): 인사 다음에 그 품목을 이어서 답한다
-      if (hit) setMuni(hit);
+    }).catch(function () {
+      var el = addBot(esc(t('tryLater')) + '<div class="chips"><button type="button" data-retry="1">' + esc(t('retry')) + '</button></div>');
+      el.querySelector('[data-retry]').addEventListener('click', function () { el.remove(); start(); });
     });
-  }).catch(function () { addBot(t('tryLater')); });
+  }
+  start();
 })();

@@ -82,6 +82,11 @@ SEC_HEADERS = {
 
 @app.middleware('http')
 async def lifecycle(request: Request, call_next):
+    if request.url.path.startswith('/static/'):          # 정적 파일은 DB 준비·동기화가 필요 없다
+        resp = await call_next(request)
+        for k, v in SEC_HEADERS.items():
+            resp.headers.setdefault(k, v)
+        return resp
     await run_in_threadpool(ensure_ready)
     ai.remember_header_token(request.headers.get('x-vercel-oidc-token'))
     path = request.url.path
@@ -347,7 +352,7 @@ def _page(name, cache='no-cache'):
     return FileResponse(os.path.join(WEB, name), headers={'Cache-Control': cache})
 
 
-@app.get('/')
+@app.api_route('/', methods=['GET', 'HEAD'])
 def home():
     return _page('index.html')
 
@@ -357,11 +362,12 @@ def admin_page():
     return _page('admin.html')
 
 
-_STATIC = {'app.js', 'i18n.js', 'admin.js', 'style.css', 'admin.css', 'udong.png', 'udong-512.png', 'manifest.webmanifest'}
+_STATIC = {'app.js', 'i18n.js', 'admin.js', 'style.css', 'admin.css', 'udong.png', 'udong-512.png'}
 
 
-@app.get('/static/{name}')
-def static(name: str):
-    if name not in _STATIC:
+@app.api_route('/static/{name}', methods=['GET', 'HEAD'])
+def static(name: str, request: Request):
+    if name not in _STATIC or not os.path.exists(os.path.join(WEB, name)):
         raise HTTPException(404)
-    return _page(name, 'public, max-age=300')
+    # ?v= 가 붙은 파일은 내용이 바뀌면 v 가 바뀌므로 오래 캐시
+    return _page(name, 'public, max-age=31536000, immutable' if request.query_params.get('v') else 'public, max-age=300')

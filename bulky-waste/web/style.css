@@ -3,12 +3,12 @@
   --panel: #ffffff;
   --ink: #17211f;
   --ink-2: #4a5754;
-  --ink-3: #6f7c79;
+  --ink-3: #5f6b68;                     /* 흰 바탕 5.5:1, 회색 바탕 5.1:1 */
   --line: #e1e7e5;
   --brand: #0f6b5c;
   --brand-ink: #ffffff;
   --brand-soft: #e4f3ee;
-  --accent: #c2581b;
+  --accent: #b04e14;
   --warn-soft: #fff5e9;
   --warn-line: #f1d3ac;
   --focus: #1b7f6e;
@@ -357,3 +357,10 @@ table.fees tr.same td.item::after { content: "〃"; color: var(--ink-3); }
   .brand { min-width: 0; overflow: hidden; }
   .brand span { overflow: hidden; text-overflow: ellipsis; display: block; }
 }
+
+/* 터치 영역 44px 이상(보이는 크기는 그대로, 누르는 영역만 넓힘) */
+.msg .row-cart, .msg .cartlist .cq button, .msg .cartlist .del, .lang-btn, .cart-pill, .muni-pill { position: relative; }
+.msg .row-cart::after, .msg .cartlist .cq button::after, .msg .cartlist .del::after, .lang-btn::after, .cart-pill::after, .muni-pill::after {
+  content: ""; position: absolute; inset: -6px; }
+.msg .chips button, .msg .actions button { min-height: 44px; }
+.composer .box:focus-within { box-shadow: 0 0 0 3px var(--brand-soft), 0 6px 24px rgba(16, 33, 30, .10); }
