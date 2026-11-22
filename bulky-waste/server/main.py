@@ -116,40 +116,67 @@ async def ticket_contact(tid: str, request: Request):
 
 @app.post('/api/quote/export')
 async def quote_export(request: Request):
-    """화면에 받은 고객용 4칸(품목·규격·수수료·배출 안내)만 CSV/엑셀로 담는다(다른 칸은 버림)."""
+    """화면에 받은 고객용 칸(품목·규격·수수료·배출 안내, 장바구니면 수량·금액)만 CSV/엑셀로 담는다(다른 칸은 버림)."""
     rate_limit(request, 'quote')
     b = await request.json()
     rows = b.get('rows') or []
     fmt = b.get('format', 'csv')
-    clean = []
+    cart = any('수량' in r for r in rows[:300] if isinstance(r, dict))
+
+    def won(fee):
+        return int(fee.replace(',', '').replace('원', '')) if re.fullmatch(r'[\d,]+원', fee) else None
+
+    head = ['품목', '규격', '수수료', '배출 안내'] + (['수량', '금액'] if cart else [])
+    clean, total = [], 0
     for r in rows[:300]:
-        clean.append([str(r.get(k) or '')[:80] for k in ('품목', '규격', '수수료', '안내')])
+        if not isinstance(r, dict):
+            continue
+        row = [str(r.get(k) or '')[:80] for k in ('품목', '규격', '수수료', '안내')]
+        if cart:
+            try:
+                qty = max(1, min(99, int(r.get('수량') or 1)))
+            except (TypeError, ValueError):
+                qty = 1
+            fee = won(row[2])
+            amt = fee * qty if fee is not None else None
+            total += amt or 0
+            row += [qty, amt]
+        clean.append(row)
     if fmt == 'xlsx':
         from openpyxl import Workbook
         from openpyxl.styles import Alignment, Font
         wb = Workbook()
         ws = wb.active
-        ws.title = '수수료'
-        ws.append(['품목', '규격', '수수료', '배출 안내'])
+        ws.title = '장바구니' if cart else '수수료'
+        ws.append(head)
         for c in ws[1]:
             c.font = Font(bold=True)
         for r in clean:
-            fee = r[2]
-            num = int(fee.replace(',', '').replace('원', '')) if re.fullmatch(r'[\d,]+원', fee) else fee
-            ws.append([r[0], r[1], num, r[3]])
-            cell = ws.cell(row=ws.max_row, column=3)
-            if isinstance(num, int):
-                cell.number_format = '#,##0"원"'
-            cell.alignment = Alignment(horizontal='right')
-        for col, w in zip('ABCD', (28, 30, 14, 30)):
+            num = won(r[2])
+            ws.append([r[0], r[1], num if num is not None else r[2], r[3]] + (r[4:] if cart else []))
+            cells = [ws.cell(row=ws.max_row, column=3)] + ([ws.cell(row=ws.max_row, column=6)] if cart else [])
+            for cell in cells:
+                if isinstance(cell.value, int):
+                    cell.number_format = '#,##0"원"'
+                cell.alignment = Alignment(horizontal='right')
+        if cart:
+            ws.append(['합계', '', '', '', '', total])
+            last = ws.max_row
+            ws.cell(row=last, column=1).font = Font(bold=True)
+            c = ws.cell(row=last, column=6)
+            c.font = Font(bold=True)
+            c.number_format = '#,##0"원"'
+        for col, w in zip('ABCDEF', (28, 30, 14, 30, 8, 14)):
             ws.column_dimensions[col].width = w
         bio = io.BytesIO()
         wb.save(bio)
         return admin.xlsx_response(bio.getvalue(), '대형폐기물_수수료.xlsx')
     bio = io.StringIO()
     w = csv.writer(bio)
-    w.writerow(['품목', '규격', '수수료', '배출 안내'])
-    w.writerows(clean)
+    w.writerow(head)
+    w.writerows([[('' if v is None else v) for v in r] for r in clean])
+    if cart:
+        w.writerow(['합계', '', '', '', '', total])
     return Response('﻿' + bio.getvalue(), media_type='text/csv; charset=utf-8',
                     headers={'Content-Disposition': "attachment; filename*=UTF-8''%EB%8C%80%ED%98%95%ED%8F%90%EA%B8%B0%EB%AC%BC_%EC%88%98%EC%88%98%EB%A3%8C.csv"})
 

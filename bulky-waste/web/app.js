@@ -3,7 +3,8 @@
   var $ = function (s, el) { return (el || document).querySelector(s); };
   var CAT_ORDER = ['가구류', '가전·전자', '생활용품', '유아용품', '반려동물', '운동·레저', '악기·취미', '사무·기타', '목재', '기타'];
   var QUICK = ['소파', '냉장고', '식기세척기', '캣타워', '전동킥보드', '매트리스'];
-  var state = { muni: '', muniName: '', mode: 'place', busy: false };
+  var state = { muni: '', muniName: '', mode: 'place', busy: false, cart: [], cartEl: null };
+  var RN = 0;
   var MUNIS = [];
 
   /* ---------- 공통 ---------- */
@@ -28,9 +29,10 @@
       });
     });
   }
-  function store(key, val) {
-    try { if (val === undefined) return localStorage.getItem(key); localStorage.setItem(key, val); } catch (e) { return null; }
-  }
+  /* 지역은 기억하지 않는다: 예전에 저장해 둔 지역도 지운다 */
+  try { localStorage.removeItem('bw.muni'); } catch (e) { /* 무시 */ }
+  function won(n) { return n.toLocaleString('ko-KR') + '원'; }
+  function feeNum(fee) { return /^[\d,]+원$/.test(String(fee || '')) ? +String(fee).replace(/[^\d]/g, '') : null; }
   function flat(s) { return String(s || '').replace(/\s+/g, ''); }
   function splitNames(s) {
     return String(s || '').split(/[,\n、，]+/).map(function (x) { return x.trim(); }).filter(Boolean).slice(0, 30);
@@ -103,14 +105,15 @@
   }
   function askPlace(again) {
     $('#muniPill').hidden = true;
-    var last = MUNIS.filter(function (m) { return m.code === store('bw.muni'); })[0];
-    addBot((again ? '지자체를 바꿀게요. <b>거주하고 계신 지자체명</b>을 입력해 주세요.'
-      : '<b>거주하고 계신 지자체명</b>을 입력해 주세요.') +
-      (last ? '<div class="chips"><button type="button" data-place="' + esc(last.code) + '">' + esc(last.name) + '</button></div>' : ''));
+    addBot(again ? '지자체를 바꿀게요. <b>거주하고 계신 지자체명</b>을 입력해 주세요.'
+      : '<b>거주하고 계신 지자체명</b>을 입력해 주세요.');
     setMode('place');
   }
   function setMuni(m, quiet) {
-    state.muni = m.code; state.muniName = m.name; store('bw.muni', m.code);
+    if (state.cart.length && state.muni && m.code !== state.muni) {   // 수수료는 지역마다 달라서 지역을 바꾸면 비운다
+      state.cart = []; renderCart(); toast('지역이 바뀌어 장바구니를 비웠습니다');
+    }
+    state.muni = m.code; state.muniName = m.name;
     $('#muniName').textContent = m.name; $('#muniPill').hidden = false;
     if (!quiet) addUser(m.name);
     addBot('<b>' + esc(m.name) + '</b> 기준으로 안내해 드릴게요.<br>버릴 품목을 입력해 주세요. 여러 개는 쉼표(,)로 구분하면 됩니다.' +
@@ -184,10 +187,30 @@
   }
   function addResult(rows) {
     rows = sortRows(rows);
-    var el = addBot('<p class="lead">문의하신 품목의 수수료입니다.</p>' + (itemsCount(rows) === 1 ? linesHTML(rows) : tableHTML(rows)) +
-      '<div class="actions"><button type="button" data-act="text">복사</button><button type="button" data-act="table">표 복사</button>' +
-      '<button type="button" data-act="csv">CSV</button><button type="button" data-act="xlsx">엑셀</button></div>', 'result');
-    el._rows = rows;
+    var id = 'r' + (++RN);
+    var multi = groups(rows).some(function (g) { return g.idx.length > 1; });
+    var el = addBot('<p class="lead">문의하신 품목의 수수료입니다.</p>' + (itemsCount(rows) === 1 ? linesHTML(rows, id) : tableHTML(rows, id)) +
+      (multi ? '<p class="sub pick-hint">규격이 여러 개인 품목은 해당하는 규격을 하나 골라 주세요.</p>' : '') +
+      '<div class="actions"><button type="button" class="pri cart-add" data-act="cart">장바구니에 담기</button></div>', 'result');
+    el._rows = rows; el._id = id;
+  }
+  /* 품목별 묶음: [{name, idx:[행 번호…]}] */
+  function groups(rows) {
+    var out = [], by = {};
+    rows.forEach(function (r, i) {
+      var n = r['품목'];
+      if (!by[n]) { by[n] = { name: n, idx: [] }; out.push(by[n]); }
+      by[n].idx.push(i);
+    });
+    return out;
+  }
+  /* 규격이 여러 개인 품목만 고르는 단추를 단다(하나뿐이면 그대로 담는다) */
+  function pickBox(rows, i, id) {
+    if (!id) return '';
+    var gs = groups(rows), g = gs.filter(function (x) { return x.name === rows[i]['품목']; })[0];
+    if (g.idx.length < 2) return '';
+    return '<input type="radio" class="pk" name="' + id + '_' + gs.indexOf(g) + '" value="' + i + '" aria-label="' +
+      esc(rows[i]['품목'] + ' ' + rows[i]['규격']) + ' 고르기">';
   }
   function addPending(names, tk) {
     var el = addBot('<p class="lead">확인 후 안내드리겠습니다.</p><ul class="plist">' + names.map(function (n) { return '<li>' + esc(n) + '</li>'; }).join('') + '</ul>' +
@@ -219,13 +242,13 @@
       }).catch(function (x) { btn.disabled = false; err.textContent = x.message; err.hidden = false; });
     });
   }
-  function linesHTML(rows) {
-    return '<ul class="lines">' + rows.map(function (r) {
-      return '<li><span class="nm">' + esc(r['품목']) + '</span><span class="sp">(' + esc(r['규격']) + ')</span>' +
+  function linesHTML(rows, id) {
+    return '<ul class="lines">' + rows.map(function (r, i) {
+      return '<li data-i="' + i + '">' + pickBox(rows, i, id) + '<span class="nm">' + esc(r['품목']) + '</span><span class="sp">(' + esc(r['규격']) + ')</span>' +
         '<span class="fe">' + esc(r['수수료']) + '</span>' + (r['안내'] ? '<span class="nt">' + esc(r['안내']) + '</span>' : '') + '</li>';
     }).join('') + '</ul>';
   }
-  function tableHTML(rows) {
+  function tableHTML(rows, id) {
     var hasNote = rows.some(function (r) { return r['안내']; });
     var grouped = itemsCount(rows) >= 10;
     var groups = grouped ? CAT_ORDER.map(function (c) {
@@ -237,7 +260,8 @@
       var prev = null;
       g.rows.forEach(function (r) {
         var same = prev === r['품목']; prev = r['품목'];
-        body += '<tr' + (same ? ' class="same"' : '') + '><td class="item">' + esc(r['품목']) +
+        var i = rows.indexOf(r);
+        body += '<tr data-i="' + i + '"' + (same ? ' class="same"' : '') + '><td class="item">' + pickBox(rows, i, id) + esc(r['품목']) +
           (r['안내'] ? '<span class="note-inline">' + esc(r['안내']) + '</span>' : '') + '</td>' +
           '<td>' + esc(r['규격']) + '</td><td class="fee">' + esc(r['수수료']) + '</td></tr>';
       });
@@ -246,19 +270,67 @@
       '<thead><tr><th scope="col">품목</th><th scope="col">규격</th><th scope="col" class="fee">수수료</th></tr></thead><tbody>' + body + '</tbody></table>';
   }
 
-  /* ---------- 복사·내려받기 ---------- */
-  function asText(rows) {
-    return ['문의하신 품목의 수수료입니다.'].concat(rows.map(function (r) {
-      return r['품목'] + ' (' + r['규격'] + ') — ' + r['수수료'] + (r['안내'] ? ' · ' + r['안내'] : '');
-    })).join('\n');
+  /* ---------- 장바구니 ---------- */
+  function addToCart(el) {
+    var rows = el._rows || [], gs = groups(rows), pick = [], miss = [];
+    gs.forEach(function (g, k) {
+      if (g.idx.length === 1) { pick.push(rows[g.idx[0]]); return; }
+      var c = el.querySelector('input[name="' + el._id + '_' + k + '"]:checked');
+      if (c) pick.push(rows[+c.value]); else miss.push(g.name);
+    });
+    if (miss.length) { toast('규격을 골라 주세요: ' + miss.join(', ')); return; }
+    pick.forEach(function (r) {
+      var hit = state.cart.filter(function (c) { return c.item === r['품목'] && c.spec === r['규격']; })[0];
+      if (hit) hit.qty = Math.min(99, hit.qty + 1);
+      else state.cart.push({ item: r['품목'], spec: r['규격'], fee: r['수수료'], note: r['안내'] || '', qty: 1 });
+    });
+    renderCart();
+    toast('장바구니에 ' + pick.length + '개 담았습니다');
   }
-  function asTable(rows) {
-    var hasNote = rows.some(function (r) { return r['안내']; });
-    var head = ['품목', '규격', '수수료'].concat(hasNote ? ['안내'] : []);
-    return [head.join('\t')].concat(rows.map(function (r) {
-      return [r['품목'], r['규격'], r['수수료']].concat(hasNote ? [r['안내']] : []).join('\t');
-    })).join('\n');
+  function cartTotal() {
+    var sum = 0, other = 0;
+    state.cart.forEach(function (c) { var n = feeNum(c.fee); if (n === null) other++; else sum += n * c.qty; });
+    return { sum: sum, other: other };
   }
+  function cartHTML() {
+    if (!state.cart.length) return '<p class="lead">장바구니가 비어 있습니다.</p><p class="sub">수수료 안내 아래 ‘장바구니에 담기’를 누르면 여기에 모입니다.</p>';
+    var t = cartTotal();
+    return '<p class="lead">장바구니 · ' + esc(state.muniName) + '</p><ul class="cartlist">' + state.cart.map(function (c, k) {
+      var n = feeNum(c.fee);
+      return '<li><div class="ci"><span class="nm">' + esc(c.item) + '</span><span class="sp">' + esc(c.spec) + '</span>' +
+        (c.note ? '<span class="nt">' + esc(c.note) + '</span>' : '') + '</div>' +
+        '<div class="cq"><button type="button" data-cart="dec" data-n="' + k + '" aria-label="' + esc(c.item) + ' 하나 빼기">−</button>' +
+        '<b>' + c.qty + '</b><button type="button" data-cart="inc" data-n="' + k + '" aria-label="' + esc(c.item) + ' 하나 더하기">+</button></div>' +
+        '<span class="fe">' + (n === null ? esc(c.fee) : won(n * c.qty)) + '</span>' +
+        '<button type="button" class="del" data-cart="del" data-n="' + k + '" aria-label="' + esc(c.item) + ' 빼기">×</button></li>';
+    }).join('') + '</ul><div class="total"><span>합계</span><b>' + won(t.sum) + '</b></div>' +
+      (t.other ? '<p class="sub">금액이 정해지지 않은 품목 ' + t.other + '개는 합계에서 빠졌습니다.</p>' : '') +
+      '<div class="actions"><button type="button" data-cart="text">복사</button><button type="button" data-cart="xlsx">엑셀 내려받기</button>' +
+      '<button type="button" data-cart="clear">비우기</button></div>';
+  }
+  function renderCart() {
+    var n = state.cart.reduce(function (a, c) { return a + c.qty; }, 0);
+    $('#cartN').textContent = n; $('#cartBtn').hidden = !n;
+    if (state.cartEl) {
+      if (state.cartEl.isConnected) state.cartEl.querySelector('.bubble').innerHTML = cartHTML();
+      else state.cartEl = null;
+    }
+  }
+  function openCart() {
+    if (state.cartEl) state.cartEl.remove();
+    state.cartEl = addBot(cartHTML(), 'result cart');
+  }
+  function cartRows() {
+    return state.cart.map(function (c) { return { '품목': c.item, '규격': c.spec, '수수료': c.fee, '안내': c.note, '수량': c.qty }; });
+  }
+  function cartText() {
+    var t = cartTotal();
+    return ['대형폐기물 수수료 장바구니 (' + state.muniName + ')'].concat(state.cart.map(function (c) {
+      var n = feeNum(c.fee);
+      return c.item + ' (' + c.spec + ') ' + c.fee + ' × ' + c.qty + (n === null ? '' : ' = ' + won(n * c.qty)) + (c.note ? ' · ' + c.note : '');
+    })).concat(['합계 ' + won(t.sum)]).join('\n');
+  }
+  $('#cartBtn').addEventListener('click', openCart);
   function copy(text, msg) {
     var done = function () { toast(msg || '복사했습니다'); };
     if (navigator.clipboard && window.isSecureContext) {
@@ -283,13 +355,22 @@
       }).catch(function (err) { toast(err.message); });
   }
   thread.addEventListener('click', function (e) {
-    var b = e.target.closest('[data-act]');
-    if (b) {
-      var rows = b.closest('.msg')._rows || [];
-      if (b.dataset.act === 'text') copy(asText(rows));
-      else if (b.dataset.act === 'table') copy(asTable(rows), '표를 복사했습니다. 엑셀·한글에 붙여 넣을 수 있습니다');
-      else download(b.dataset.act, rows);
-      return;
+    var b = e.target.closest('[data-act="cart"]');
+    if (b) { addToCart(b.closest('.msg')); return; }
+    var c = e.target.closest('[data-cart]');
+    if (c) {
+      var k = +c.dataset.n, it = state.cart[k], act = c.dataset.cart;
+      if (act === 'inc' && it) it.qty = Math.min(99, it.qty + 1);
+      else if (act === 'dec' && it) { if (it.qty > 1) it.qty--; else state.cart.splice(k, 1); }
+      else if (act === 'del' && it) state.cart.splice(k, 1);
+      else if (act === 'clear') state.cart = [];
+      else if (act === 'text') { copy(cartText(), '장바구니를 복사했습니다'); return; }
+      else if (act === 'xlsx') { download('xlsx', cartRows()); return; }
+      renderCart(); return;
+    }
+    var row = e.target.closest('[data-i]');           // 규격 줄을 누르면 그 규격을 고른다
+    if (row && !e.target.closest('input')) {
+      var pk = row.querySelector('input.pk'); if (pk) pk.checked = true;
     }
     var t = e.target.closest('[data-ticket]');
     if (t) copy(location.origin + '/?t=' + t.dataset.ticket, '확인 주소를 복사했습니다');

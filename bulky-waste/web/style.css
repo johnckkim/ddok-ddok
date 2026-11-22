@@ -278,3 +278,44 @@ table.fees tr.same td.item::after { content: "〃"; color: var(--ink-3); }
 .msg .contact button.pri:disabled { opacity: .6; }
 .msg .contact .err { margin: 0; color: #c0392b; font-size: 13px; }
 .msg .done-msg { margin: 6px 0 10px; font-weight: 700; color: var(--ink); }
+
+/* 장바구니 */
+.top-r { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.top-r .muni-pill { max-width: 46vw; }
+.cart-pill { flex: none; display: inline-flex; align-items: center; gap: 6px; font: inherit; font-weight: 700; font-size: 14px; color: var(--brand-ink);
+  background: var(--brand); border: 0; border-radius: 999px; padding: 6px 12px; min-height: 36px; cursor: pointer; }
+.cart-pill[hidden] { display: none; }
+.cart-pill b { background: var(--brand-ink); color: var(--brand); border-radius: 999px; min-width: 22px; padding: 1px 6px; font-size: 13px; text-align: center; }
+.msg .actions button.cart-add { background: var(--brand); color: var(--brand-ink); border-color: var(--brand); font-weight: 700; padding: 8px 18px; min-height: 44px; }
+.msg .actions button.cart-add:hover { color: var(--brand-ink); filter: brightness(1.05); }
+.msg .pick-hint { margin: 10px 0 0; font-size: 13px; color: var(--ink-2); }
+.msg input.pk { width: 18px; height: 18px; margin: 0 6px 0 0; vertical-align: -3px; accent-color: var(--brand); cursor: pointer; }
+.msg [data-i] { cursor: default; }
+.msg tr[data-i]:has(input.pk) , .msg li[data-i]:has(input.pk) { cursor: pointer; }
+.msg tr[data-i]:has(input.pk:checked) td, .msg li[data-i]:has(input.pk:checked) { background: var(--brand-soft); }
+.msg .cartlist { list-style: none; margin: 0; padding: 0; }
+.msg .cartlist li { display: grid; grid-template-columns: 1fr auto auto 32px; align-items: center; gap: 8px; padding: 10px 0; border-top: 1px solid var(--line); }
+.msg .cartlist li:first-child { border-top: 0; }
+.msg .cartlist .ci { display: grid; gap: 2px; min-width: 0; }
+.msg .cartlist .nm { font-weight: 700; }
+.msg .cartlist .sp, .msg .cartlist .nt { color: var(--ink-2); font-size: 13px; }
+.msg .cartlist .cq { display: inline-flex; align-items: center; gap: 2px; border: 1px solid var(--line); border-radius: 999px; }
+.msg .cartlist .cq button, .msg .cartlist .del { font: inherit; font-size: 18px; line-height: 1; width: 34px; height: 34px; border: 0; background: transparent; color: var(--ink); cursor: pointer; border-radius: 999px; }
+.msg .cartlist .cq b { min-width: 18px; text-align: center; font-variant-numeric: tabular-nums; }
+.msg .cartlist .fe { font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; text-align: right; }
+.msg .cartlist .del { color: var(--ink-3); width: 32px; }
+.msg .total { display: flex; justify-content: space-between; align-items: baseline; margin-top: 8px; padding-top: 10px; border-top: 2px solid var(--ink); font-size: 17px; }
+.msg .total b { font-size: 20px; font-variant-numeric: tabular-nums; }
+@media (max-width: 380px) {
+  .msg .cartlist li { grid-template-columns: 1fr auto 28px; }
+  .msg .cartlist .cq { grid-column: 1; justify-self: start; }
+  .msg .cartlist .fe { grid-column: 2; grid-row: 2; }
+  .msg .cartlist .del { grid-column: 3; grid-row: 1; }
+}
+.brand { white-space: nowrap; flex: none; }
+@media (max-width: 420px) {
+  .top-in { gap: 8px; }
+  .top-r .muni-pill { max-width: 34vw; padding: 6px 10px; }
+  .top-r .muni-pill small { display: none; }
+  .cart-pill { padding: 6px 10px; }
+}

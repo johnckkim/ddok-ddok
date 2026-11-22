@@ -8,7 +8,7 @@
 <meta name="theme-color" content="#00c4b4">
 <link rel="icon" href="/static/udong.png" type="image/png">
 <link rel="apple-touch-icon" href="/static/udong-512.png">
-<link rel="stylesheet" href="/static/style.css?v=6">
+<link rel="stylesheet" href="/static/style.css?v=7">
 </head>
 <body class="chat-page">
 <header class="top">
@@ -16,7 +16,10 @@
     <a class="brand" href="/" aria-label="처음으로">
       <span>우리동네플러스 <small>수수료 안내</small></span>
     </a>
-    <button type="button" class="muni-pill" id="muniPill" hidden aria-label="지자체 바꾸기"><span id="muniName"></span><small>변경</small></button>
+    <div class="top-r">
+      <button type="button" class="cart-pill" id="cartBtn" hidden aria-label="장바구니 보기">장바구니 <b id="cartN">0</b></button>
+      <button type="button" class="muni-pill" id="muniPill" hidden aria-label="지자체 바꾸기"><span id="muniName"></span><small>변경</small></button>
+    </div>
   </div>
 </header>
 
@@ -44,6 +47,6 @@
   </div>
 </footer>
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
-<script src="/static/app.js?v=7" defer></script>
+<script src="/static/app.js?v=8" defer></script>
 </body>
 </html>
