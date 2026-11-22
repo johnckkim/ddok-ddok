@@ -103,7 +103,7 @@ def _date_key(rows):
     for r in rows[:200]:
         keys |= set(r)
     for k in sorted(keys):
-        if 'STDR_DE' in k.upper() or k.upper() in ('REFERENCE_DATE', 'STD_DT', 'BASE_DE'):
+        if 'STDR_DE' in k.upper() or k.upper() in ('CRTR_YMD', 'REFERENCE_DATE', 'STD_DT', 'BASE_DE'):
             return k
     return None
 
@@ -115,7 +115,11 @@ def group(rows):
         sd = sido_of(r.get('CTPV_NM'))
         if not sd:
             continue
-        sgg = _sgg_base(r.get('SGG_NM')) or (sd[1] if sd[0] in ('세종',) else '')
+        raw = str(r.get('SGG_NM') or '').strip()
+        if raw in ('', '없음', '-'):
+            inst = str(r.get('INSTT_NM') or '').replace(sd[1], '').strip()     # '부산광역시 사하구' → '사하구'
+            raw = inst or (sd[1] if sd[0] == '세종' else '')
+        sgg = _sgg_base(raw)
         if not sgg:
             continue
         out[(sd[0], sgg)][_pick(r, 'INSTT_NM') or sgg].append(r)

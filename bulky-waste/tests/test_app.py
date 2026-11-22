@@ -417,15 +417,15 @@ def _fake_public_rows():
     rows = []
     def add(ctpv, sgg, inst, items, date='2026-06-30'):
         for nm, sp, fee, free in items:
-            rows.append({'CTPV_NM': ctpv, 'SGG_NM': sgg, 'INSTT_NM': inst, 'LAR_WAS_NM': nm, 'LAR_WAS_STNDRD': sp,
-                         'FEE': str(fee), 'PAID_FREE_YN': '무료' if free else '유료', 'DATA_STDR_DE': date})
+            rows.append({'CTPV_NM': ctpv, 'SGG_NM': sgg, 'INSTT_NM': inst, 'LAR_WAS_NM': nm, 'LAR_WAS_SPCFCT': sp,
+                         'FEE': str(fee), 'PAID_FREE_YN': '무료' if free else '유료', 'CRTR_YMD': date})
     base = [('장롱', '가로 120cm 이상', 15000, 0), ('장롱', '가로 120cm 미만', 10000, 0), ('소파', '1인용', 4000, 0), ('소파', '2인용 이상', 6000, 0),
             ('냉장고', '모든규격', 5000, 0), ('세탁기', '모든규격', 5000, 0), ('의자', '모든규격', 2000, 0), ('선풍기', '모든규격', 0, 1)]
     add('서울특별시', '강남구', '서울특별시 강남구', base)
     add('경기도', '수원시 장안구', '경기도 수원시', base, '2026-03-01')
     add('경기도', '과천시', '경기도 과천시', base)
     add('부산광역시', '사하구', '부산광역시 사하구', base)
-    add('부산광역시', '중구', '부산광역시 중구', base)
+    add('부산광역시', '없음', '부산광역시 중구', base)
     add('전라남도', '여수시', '전라남도 여수시', base[:3])          # 5행 미만 → 건너뜀
     return rows
 
@@ -444,7 +444,7 @@ def test_importer_run():
     assert set(names) == {'서울특별시 강남구', '경기도 수원시', '부산광역시 사하구'}
     assert any(s['name'] == '경기도 과천시' for s in rep['skipped'])        # 직접 올린 과천 조례는 유지
     assert any('여수시' in s['name'] for s in rep['skipped'])
-    assert rep['missing'] == ['경북 경산시'] and rep['spec_column'] == 'LAR_WAS_STNDRD' and names['경기도 수원시']['date'] == '2026-03-01'
+    assert rep['missing'] == ['경북 경산시'] and rep['spec_column'] == 'LAR_WAS_SPCFCT' and rep['date_column'] == 'CRTR_YMD' and names['경기도 수원시']['date'] == '2026-03-01'
     code = names['서울특별시 강남구']['code']
     j = cust('post', '/api/quote', json={'municipality': code, 'items': [{'name': '소파'}, {'name': '선풍기'}, {'name': '장롱'}]}).json()
     assert j['municipality'] == '서울특별시 강남구'
