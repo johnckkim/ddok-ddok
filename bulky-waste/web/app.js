@@ -305,7 +305,9 @@
   function cardHTML(c) {
     var h = '<span class="step">질문 ' + c.step + '/' + c.max_steps + '</span>';
     if (c.kind === 'yesno') {
-      h += '<p class="q">“' + esc(c.name) + '” — 문의하신 품목이 <b>' + esc(c.item_label) + '</b>' + josa(c.item_label) + ' 맞으신가요?</p>';
+      h += c.as_item
+        ? '<p class="q">“' + esc(c.name) + '”은(는) <b>‘' + esc(c.item_label) + '’</b> 항목으로 내놓으시면 됩니다. 이대로 안내해 드릴까요?</p>'
+        : '<p class="q">“' + esc(c.name) + '” — 문의하신 품목이 <b>' + esc(c.item_label) + '</b>' + josa(c.item_label) + ' 맞으신가요?</p>';
       if (c.product && (c.product.image || c.product.title)) {
         h += '<a class="prod" href="' + esc(c.product.link || '#') + '" target="_blank" rel="noopener noreferrer">' +
           (c.product.image ? '<img src="' + esc(c.product.image) + '" alt="" loading="lazy" referrerpolicy="no-referrer">' : '') +

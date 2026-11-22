@@ -527,10 +527,11 @@ def test_ai_picks_ordinance_item_then_yes():
     try:
         j = quote('냥이궁전 대형')
         card = j['needs_confirm'][0]
-        assert j['pending'] == [] and card['kind'] == 'yesno' and card['item_label'] == '캣타워'
+        assert j['pending'] == [] and card['kind'] == 'yesno' and card['item_label'] == '캣타워' and card['as_item']
         assert '캣타워' in seen['p'] and '냥이궁전 대형' in seen['p']
         r = cust('post', f"/api/confirm/{card['card_id']}", json={'answer': 'yes', 'size': '높이 1m 이상'}).json()
         assert r['status'] == 'ok' and r['rows'][0]['수수료'] == '5,000원'
+        assert r['rows'][0]['품목'] == '냥이궁전 대형' and r['rows'][0]['안내'] == '‘캣타워’ 항목으로 배출'
         ai._TEST[:] = [lambda p: '{"items": [], "what": ""}']
         assert quote('알수없는물건 특대')['pending'] == ['알수없는물건 특대']
     finally:

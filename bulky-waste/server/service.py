@@ -445,9 +445,9 @@ def _ai_rescue(c, name):
         return None
     top, res = ok[0]
     st = {'m': c.muni, 'e': name, 's': 1, 'p': 'yesno', 'c': [_cand_tuple(top)], 'x': [top['label']],
-          'a': [d['label'] for d, _ in ok[1:]]}
-    card = {'kind': 'yesno', 'question': f"문의하신 품목이 {top['label']}{josa(top['label'])} 맞으신가요?", 'item_label': top['label'],
-            'product': None, 'size_options': _size_options(res['rows'])}
+          'a': [d['label'] for d, _ in ok[1:]], 'v': 1}
+    card = {'kind': 'yesno', 'question': f"‘{top['label']}’ 항목으로 내놓으시면 됩니다. 이대로 안내해 드릴까요?",
+            'item_label': top['label'], 'as_item': True, 'product': None, 'size_options': _size_options(res['rows'])}
     return _card_public(st, card)
 
 
@@ -591,12 +591,14 @@ def _log_expression(c, expr, label, query):
                 (c.muni, expr, en, label, query, 1, 'new', now, now))
 
 
-def _finish(c, expr, d, size=None, label=None):
-    label = label or (C.with_expr(d['label'], expr) if C.is_brand(expr) else d['label'])
+def _finish(c, expr, d, size=None, label=None, as_item=False):
+    label = label or (expr if as_item else C.with_expr(d['label'], expr) if C.is_brand(expr) else d['label'])
     res = resolve(c, d['query'], label=label)
     _log_expression(c, expr, d['label'], d['query'])
     if res['kind'] == 'rows':
         rows = res['rows']
+        if as_item:      # AI가 고른 조례 항목: 고객이 쓴 이름 + '○○ 항목으로 배출'
+            rows = [dict(o, note=o.get('note') or f"‘{d['label']}’ 항목으로 배출") for o in rows]
         if size:
             pick = [o for o in rows if o['spec'] == size]
             rows = pick or rows
@@ -635,7 +637,7 @@ def confirm(token, answer, choice=None, size=None, text=None, photo=None, dims=N
     if phase == 'yesno':
         d = _from_tuple(cands[0])
         if answer == 'yes':
-            return _finish(c, expr, d, size=size) or _answer(c)
+            return _finish(c, expr, d, size=size, as_item=bool(st.get('v'))) or _answer(c)
         # 아니요 → 같은 검색·주변 후보 중 수수료가 서로 다른 것 3~4개 + 기타
         others = [{'id': n, 'label': n, 'query': n, 'desc': ''} for n in st.get('a', [])]
         others += [x for x in (_shopping_candidates(c, expr) or []) if x['label'] not in st.get('x', [])]

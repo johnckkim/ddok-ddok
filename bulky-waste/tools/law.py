@@ -113,6 +113,7 @@ def collect(muni, sido=''):
             log['tried'].append({'seq':seq,'title':t[:80],'files':len(files)})
             best=None
             for fseq,fnm in files:
+                if '연혁' in fnm: continue   # [연혁] 파일은 옛 표 — 현행 별표만 읽는다
                 url=f'https://www.law.go.kr/LSW/flDownload.do?gubun=ELIS&flSeq={fseq}&flNm={urllib.parse.quote(fnm)}'
                 try: data=fetch(url)
                 except Exception as e: continue
