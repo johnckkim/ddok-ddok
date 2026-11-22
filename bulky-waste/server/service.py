@@ -217,6 +217,33 @@ def _rows_for(c, q, r, label):
     return out, bool(review)
 
 
+def _base(name):
+    return re.sub(r'\s+', ' ', re.sub(r'\(.*?\)', '', name or '')).strip()
+
+
+def _with_siblings(c, q, rows, label):
+    """확정표에서 괄호 속 이름(예: '유아용 쿠션(범퍼형·침대 범퍼)')으로 한 규격 줄만 걸리면
+    같은 본 품목('유아용 쿠션')의 다른 규격 줄도 함께 보여 준다(크기는 고객이 고른다)."""
+    k = E.norm(q)
+    hit = [x for x in c.conf if k in x['tok']]
+    bases = {_base(x['name']) for x in hit}
+    if len(bases) != 1:
+        return rows
+    base = bases.pop()
+    sib = [x for x in c.conf if _base(x['name']) == base]
+    if len(sib) <= len(rows) or not base:
+        return rows
+    note = rows[0].get('note', '') if rows else ''
+    out, seen = [], set()
+    for x in sorted(sib, key=lambda x: x['fee']):
+        spec = C.tidy_spec(x['spec'] or '모든규격')
+        if (spec, x['fee']) in seen:
+            continue
+        seen.add((spec, x['fee']))
+        out.append({'item': label, 'spec': spec, 'fee': x['fee'], 'note': note})
+    return out
+
+
 def _category(c, label, q):
     return c.cats.get(E.norm(q)) or c.cats.get(E.norm(label)) or C.classify(label) or C.classify(q)
 
@@ -275,6 +302,16 @@ def resolve(c, q, label=None, expr=None):
     if multi:
         return {'kind': 'ask', 'rows': [], 'result': r, 'names': multi}
     if not r['등급'].startswith(('L0', 'L1')):
+        # 같은 물건의 다른 이름(아기 범퍼 → 침대범퍼)이 이 지자체 조례·확정표에 있으면 그것이 우선
+        alias = C.EQUIV_ALIAS.get(E.norm(q))
+        if alias and alias != E.norm(q):
+            ra = engine_price(c, alias)
+            if ra['등급'].startswith(('L0', 'L1')) and not ra.get('확인') and not _multi_confirmed(c, alias, ra):
+                rows_a, review_a = _rows_for(c, alias, ra, label)
+                if ra['등급'].startswith('L1'):
+                    rows_a = _with_siblings(c, alias, rows_a, label)
+                if rows_a and not review_a:
+                    return {'kind': 'rows', 'rows': rows_a, 'result': dict(ra, 품목=q, 경로=f"다른 이름 '{alias}'로 찾음"), 'review': False}
         eq = _equiv_rows(c, q, label)
         if eq:
             return {'kind': 'rows', 'rows': eq[0], 'result': dict(r, 품목=q, 경로=f"같은 배출 항목 '{eq[1]}'")}
@@ -285,9 +322,13 @@ def resolve(c, q, label=None, expr=None):
             r2 = engine_price(c, head)
             if r2['등급'].startswith(('L0', 'L1')) and not r2.get('확인') and not _multi_confirmed(c, head, r2):
                 rows2, review2 = _rows_for(c, head, r2, label)
+                if r2['등급'].startswith('L1'):
+                    rows2 = _with_siblings(c, head, rows2, label)
                 if rows2 and not review2:
                     return {'kind': 'rows', 'rows': rows2, 'result': dict(r2, 품목=q, 경로=f"끝말 '{head}'로 찾음"), 'review': False}
     rows, review = _rows_for(c, q, r, label)
+    if r['등급'].startswith('L1'):
+        rows = _with_siblings(c, q, rows, label)
     if review and c.policy != 'show':
         return {'kind': 'pending', 'rows': rows, 'result': r, 'review': True}
     return {'kind': 'rows', 'rows': rows, 'result': r, 'review': review}

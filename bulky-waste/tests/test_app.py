@@ -459,9 +459,10 @@ def test_import_collected_rules(tmp_path):
 
 
 def test_bed_bumper_expressions():
-    for q in ('베드 범퍼', '베드범퍼', '범퍼침대', '침대 범퍼'):
+    for q in ('베드 범퍼', '베드범퍼', '범퍼침대', '침대 범퍼', '아기 범퍼'):
         j = quote(q)
-        assert j['rows'] and j['pending'] == [] and j['rows'][0]['수수료'] == '3,000원', (q, j)
+        # 확정표 '유아용 쿠션(범퍼형·침대 범퍼)'은 1m 이상 한 줄뿐이지만 같은 품목의 1m 미만 줄도 함께 보여 준다
+        assert j['pending'] == [] and [(r['규격'], r['수수료']) for r in j['rows']] == [('가로 1m 미만', '2,000원'), ('가로 1m 이상', '3,000원')], (q, j)
     assert rows_of(quote('소파베드'))[0][2] == '10,000원'          # 베드→침대 바꿔도 기존 확정표 그대로
 
 
