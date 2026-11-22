@@ -11,6 +11,58 @@ from . import shopping, store
 from .tokens import sign, unsign
 
 BASE_SYN = list(E.SYN)
+_ORIG_HEAD = E.local_head
+
+
+def _local_head(q, local):
+    """엔진 끝말 찾기에 '다른 물건' 막기(전기장판→장판, 고양이화장실→이동식 화장실, 키보드→보드)."""
+    k = E.norm(q)
+    for head, pres in C.HEAD_BLOCK.items():
+        if k.endswith(head) and k != head and any(k[:-len(head)].endswith(p) for p in pres):
+            return []
+    for head, pres in C.HEAD_ONLY.items():
+        if k.endswith(head) and k != head and not any(k[:-len(head)].endswith(p) for p in pres):
+            return []
+    return _ORIG_HEAD(q, local)
+
+
+def _local_analog(q, local):
+    """엔진 유사품목 찾기와 같되, 키워드가 맨 앞에 있고 나머지가 따로 아는 품목이면 쓰지 않는다
+    ('드럼세탁기'는 '드럼'(악기)이 아니라 세탁기)."""
+    k = E.norm(q); hits = []; first = None
+    known = {E.norm(a) for a, _ in E.ANALOG} | {E.norm(b) for _, b in E.ANALOG} | {t for r in local for t in r['tok']}
+    for qk, lk in E.ANALOG:
+        nk = E.norm(qk)
+        if first and len(nk) < len(E.norm(first)):
+            break
+        if nk in k:
+            rest = k[len(nk):] if k.startswith(nk) else ''
+            if rest and len(rest) >= 2 and rest in known:
+                continue
+            key = E.norm(lk)
+            hit = [row for row in local if key in row['tok']]
+            if not hit and len(key) >= 2:
+                hit = [row for row in local if any(key in t for t in row['tok'])]
+            if hit:
+                first = first or qk
+                hits += [h for h in hit if h not in hits]
+    return (first and hits and first), hits
+
+
+E.local_head = _local_head
+E.local_analog = _local_analog
+# 엔진 유사품목 사전 보강(엔진 파일은 건드리지 않고 여기서 더한다)
+for _p in [('전기장판', '전기매트'), ('전기장판', '온수매트'), ('전기장판', '옥매트'), ('전기요', '전기매트'),
+           ('러닝머신', '운동기구'), ('런닝머신', '운동기구'), ('워킹머신', '운동기구')]:
+    if _p not in E.ANALOG:
+        E.ANALOG.append(_p)
+E.ANALOG.sort(key=lambda x: -len(x[0]))
+_EXCL = re.compile(r'\([^()]*(별도|제외|미포함|불포함)[^()]*\)')
+
+
+def _tok(name):
+    """품목 토큰. '소파(쿠션 별도)'처럼 빠지는 물건은 검색어로 쓰지 않는다."""
+    return E.tokens(re.sub(r'[+ㆍ&]', ',', _EXCL.sub(' ', str(name or ''))))   # '운동기구(런닝머신+싸이클)' → 런닝머신·싸이클
 BASE_AMBIG = tuple(E.AMBIG)
 BASE_VAGUE = set(E.VAGUE)
 BRAND_SYN = {'스탠바이미', '바디프렌드', '워시타워', '에어드레서', '룸바'}   # SYN 중 상품명·브랜드 → 일반 명칭인 것
@@ -73,11 +125,11 @@ def ctx(muni):
         brand_extra, hints = _apply_dictionary()
         c = Ctx()
         c.muni, c.name = muni, m['name']
-        c.local = [{'name': r['item'], 'spec': r['spec'], 'fee': r['fee'], 'tok': E.tokens(r['item']),
+        c.local = [{'name': r['item'], 'spec': r['spec'], 'fee': r['fee'], 'tok': _tok(r['item']),
                     'disp_item': r['disp_item'], 'disp_spec': r['disp_spec']}
                    for r in store.q('SELECT * FROM ordinance WHERE muni=? ORDER BY ord', (muni,))]
         crow = store.q('SELECT * FROM confirmed WHERE muni=? ORDER BY id', (muni,))
-        c.conf = [{'name': r['item'], 'spec': r['spec'] or '', 'fee': r['fee'], 'tok': E.tokens(r['item'])}
+        c.conf = [{'name': r['item'], 'spec': r['spec'] or '', 'fee': r['fee'], 'tok': _tok(r['item'])}
                   for r in crow if r['fee'] and r['fee'] > 0 and not r['method']]
         c.methods = [{'name': r['item'], 'spec': r['spec'] or '모든규격', 'method': r['method'], 'tok': E.tokens(r['item'])}
                      for r in crow if r['method']]
@@ -244,6 +296,66 @@ def _with_siblings(c, q, rows, label):
     return out
 
 
+def _group_rows(src, label):
+    """조례 행 묶음 → 고객 행(금액순, 품목명이 여럿이면 줄마다 조례 품목명, 3단 이상은 범위 표기)."""
+    clean = lambda n: re.sub(r'\s+', ' ', re.sub(r'\s*\(\d+\)\s*', ' ', n or '')).strip()
+    names = list(dict.fromkeys(clean(x['disp_item'] or x['name']) for x in src))
+    out, seen = [], set()
+    for x in sorted(src, key=lambda x: x['fee']):
+        sp = x['disp_spec'] or C.tidy_spec(x['spec'])
+        it = label if len(names) == 1 else clean(x['disp_item'] or x['name'])
+        if (it, sp, x['fee']) in seen:
+            continue
+        seen.add((it, sp, x['fee']))
+        out.append({'item': it, 'spec': sp, 'fee': x['fee'], 'note': '', 'fixed': bool(x['disp_spec'])})
+    for item in dict.fromkeys(o['item'] for o in out):
+        grp = [o for o in out if o['item'] == item]
+        if len(grp) >= 3 and not any(g['fixed'] for g in grp):
+            for g, sp in zip(grp, _ladder([g['spec'] for g in grp])):
+                g['spec'] = sp
+    for o in out:
+        o.pop('fixed', None)
+    return out
+
+
+def _l2_rows(c, q, label, spec_only=False):
+    """'양문형냉장고'·'3인용소파'처럼 앞말이 붙은 이름: 끝말 품목(없으면 유사품목)의 조례 행을 모두 펼친다.
+    앞말이 규격 원문에 들어 있으면(침대 │ 2층 침대) 그 줄만 보여 준다."""
+    hd = E.local_head(q, c.local)
+    src = hd or E.local_analog(q, c.local)[1]
+    if not src:
+        return None
+    k = E.norm(q)
+    head = max((t for x in src for t in x['tok'] if k.endswith(t)), key=len, default='')
+    pre = k[:len(k) - len(head)] if head else ''
+    raw = lambda s: re.sub(r'\s', '', str(s or '').lower())
+    hit = [x for x in src if pre and head and (pre + head) in raw(x['spec'])]                 # 침대 │ 돌침대 1인용
+    hit = hit or [x for x in src if len(pre) >= 2 and pre in raw(x['spec'])]               # 냉장고 │ 양문형(600L 이상)
+    if spec_only and not hit:
+        return None
+    out = _group_rows(hit or src, label)
+    if not hd:      # 다른 품목(유사품목)으로 안내하면 어느 항목인지 밝힌다
+        names = {o['item'] for o in out}
+        if names == {label}:
+            nm = re.sub(r'\s*\(\d+\)\s*', ' ', src[0]['disp_item'] or src[0]['name']).strip()
+            for o in out:
+                o['note'] = f'‘{nm}’ 항목으로 배출'
+    return out
+
+
+def _unclear(rows):
+    """같은 품목·같은 규격 글자에 금액이 둘 이상이면(규격 원문 유실) 고객이 고를 수 없다."""
+    seen = {}
+    for o in rows:
+        if o.get('fee') is None:
+            continue
+        key = (o['item'], o['spec'])
+        if key in seen and seen[key] != o['fee']:
+            return True
+        seen[key] = o['fee']
+    return False
+
+
 def _category(c, label, q):
     return c.cats.get(E.norm(q)) or c.cats.get(E.norm(label)) or C.classify(label) or C.classify(q)
 
@@ -292,6 +404,12 @@ def resolve(c, q, label=None, expr=None):
     mh = _method_hit(c, q)
     if mh:
         rows = [{'item': label, 'spec': C.tidy_spec(m['spec']), 'fee': None, 'method': m['method'], 'note': ''} for m in mh]
+        # 무상수거 같은 배출 방법 줄이 있어도 조례·확정표의 유료 규격은 함께 보여 준다(큰 TV 등)
+        r0 = engine_price(c, q)
+        if r0['등급'].startswith(('L0', 'L1')) and not r0.get('확인'):
+            paid, rv = _rows_for(c, q, r0, label)
+            if paid and not rv:
+                rows += [o for o in paid if o['fee']]
         return {'kind': 'rows', 'rows': rows, 'result': {'등급': '배출 방법', '품목': q}}
     if _is_ambiguous(c, q):
         return {'kind': 'ask', 'rows': [], 'result': {'등급': 'L? 품목 확인 필요(표현 사전)', '품목': q}}
@@ -318,17 +436,36 @@ def resolve(c, q, label=None, expr=None):
     if r['등급'].startswith('L4') and ' ' in q and not expr:
         # 근거가 전혀 없는 여러 낱말 표현('베드 범퍼')은 끝말('범퍼')이 조례·확정표에 있으면 그 금액을 쓴다
         head = q.split()[-1]
-        if len(head) >= 2:
+        hk = E.norm(head)
+        ok_l1 = lambda: any(E.norm(_base(x['name'])) == hk for x in c.conf if hk in x['tok'])   # 수식어 붙은 확정표 품목(강아지 계단)은 대체하지 않음
+        if len(head) >= 2 and hk not in C.AMBIG_NOUNS:      # '원목 테이블'처럼 끝말이 애매하면 대체하지 않음
             r2 = engine_price(c, head)
-            if r2['등급'].startswith(('L0', 'L1')) and not r2.get('확인') and not _multi_confirmed(c, head, r2):
+            if r2['등급'].startswith(('L0', 'L1')) and not r2.get('확인') and not _multi_confirmed(c, head, r2) \
+                    and (r2['등급'].startswith('L0') or ok_l1()):
                 rows2, review2 = _rows_for(c, head, r2, label)
                 if r2['등급'].startswith('L1'):
                     rows2 = _with_siblings(c, head, rows2, label)
                 if rows2 and not review2:
                     return {'kind': 'rows', 'rows': rows2, 'result': dict(r2, 품목=q, 경로=f"끝말 '{head}'로 찾음"), 'review': False}
+    if r['등급'].startswith('L2* 유사품목'):
+        # 통계와 차이가 커도 앞말이 규격 원문에 그대로 있으면(침대 │ 1인용 돌침대 세트) 그 줄이 답이다
+        l2s = _l2_rows(c, q, label, spec_only=True)
+        if l2s and not _unclear(l2s):
+            return {'kind': 'rows', 'rows': l2s, 'result': dict(r, 경로=str(r.get('경로')) + ' (규격 일치)'), 'review': False}
+    if r['등급'].startswith('L2 유사품목'):
+        # 상위어·유사품목은 최저가 한 줄 대신 그 품목의 규격을 모두 보여 준다(앞말이 규격에 있으면 그 줄만)
+        l2 = _l2_rows(c, q, label)
+        if l2 and _unclear(l2):
+            return {'kind': 'pending', 'rows': l2, 'result': dict(r, 경로=str(r.get('경로')) + ' (규격 원문 유실)'), 'review': True}
+        if l2:
+            return {'kind': 'rows', 'rows': l2, 'result': r, 'review': False}
     rows, review = _rows_for(c, q, r, label)
     if r['등급'].startswith('L1'):
         rows = _with_siblings(c, q, rows, label)
+    if _unclear(rows):          # '모든규격 3,000 / 모든규격 5,000' → 확인 후 안내
+        review = True
+        if c.policy == 'show':
+            return {'kind': 'pending', 'rows': rows, 'result': dict(r, 경로=str(r.get('경로')) + ' (규격 원문 유실)'), 'review': True}
     if review and c.policy != 'show':
         return {'kind': 'pending', 'rows': rows, 'result': r, 'review': True}
     return {'kind': 'rows', 'rows': rows, 'result': r, 'review': review}

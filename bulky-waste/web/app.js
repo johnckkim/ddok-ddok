@@ -280,13 +280,16 @@
     });
     if (miss.length) { toast('규격을 골라 주세요: ' + miss.join(', ')); return; }
     pick.forEach(function (r) {
-      var hit = state.cart.filter(function (c) { return c.item === r['품목'] && c.spec === r['규격']; })[0];
+      var hit = state.cart.filter(function (c) { return c.item === r['품목'] && c.spec === r['규격'] && c.fee === r['수수료']; })[0];
       if (hit) hit.qty = Math.min(99, hit.qty + 1);
       else state.cart.push({ item: r['품목'], spec: r['규격'], fee: r['수수료'], note: r['안내'] || '', qty: 1 });
     });
     renderCart();
     toast('장바구니에 ' + pick.length + '개 담았습니다');
   }
+  /* 면적·길이·무게 단위 요금, 기본+추가 요금: 수량은 단위 수이고 합계가 달라질 수 있다 */
+  var UNIT_RE = /(\d[\d.,]*\s*(㎡|m2|m²|평|cm|㎝|m|kg|㎏|ℓ|L|리터|톤|인치)\s*(당|마다))|당\s*\)|추가|초과\s*시|마다/;
+  function isUnit(c) { return UNIT_RE.test(String(c.spec || '')); }
   function cartTotal() {
     var sum = 0, other = 0;
     state.cart.forEach(function (c) { var n = feeNum(c.fee); if (n === null) other++; else sum += n * c.qty; });
@@ -298,13 +301,15 @@
     return '<p class="lead">장바구니 · ' + esc(state.muniName) + '</p><ul class="cartlist">' + state.cart.map(function (c, k) {
       var n = feeNum(c.fee);
       return '<li><div class="ci"><span class="nm">' + esc(c.item) + '</span><span class="sp">' + esc(c.spec) + '</span>' +
-        (c.note ? '<span class="nt">' + esc(c.note) + '</span>' : '') + '</div>' +
+        (c.note ? '<span class="nt">' + esc(c.note) + '</span>' : '') +
+        (isUnit(c) ? '<span class="nt unit">수량에 단위 수를 넣어 주세요</span>' : '') + '</div>' +
         '<div class="cq"><button type="button" data-cart="dec" data-n="' + k + '" aria-label="' + esc(c.item) + ' 하나 빼기">−</button>' +
         '<b>' + c.qty + '</b><button type="button" data-cart="inc" data-n="' + k + '" aria-label="' + esc(c.item) + ' 하나 더하기">+</button></div>' +
         '<span class="fe">' + (n === null ? esc(c.fee) : won(n * c.qty)) + '</span>' +
         '<button type="button" class="del" data-cart="del" data-n="' + k + '" aria-label="' + esc(c.item) + ' 빼기">×</button></li>';
     }).join('') + '</ul><div class="total"><span>합계</span><b>' + won(t.sum) + '</b></div>' +
-      (t.other ? '<p class="sub">금액이 정해지지 않은 품목 ' + t.other + '개는 합계에서 빠졌습니다.</p>' : '') +
+      (t.other ? '<p class="sub">무상수거 등 금액이 없는 품목 ' + t.other + '개는 합계에서 빠졌습니다.</p>' : '') +
+      (state.cart.some(isUnit) ? '<p class="sub">면적·길이·무게 단위로 매기거나 추가 요금이 붙는 품목이 있어 실제 금액은 달라질 수 있습니다.</p>' : '') +
       '<div class="actions"><button type="button" data-cart="text">복사</button><button type="button" data-cart="xlsx">엑셀 내려받기</button>' +
       '<button type="button" data-cart="clear">비우기</button></div>';
   }

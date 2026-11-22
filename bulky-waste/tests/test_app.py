@@ -459,7 +459,7 @@ def test_import_collected_rules(tmp_path):
 
 
 def test_bed_bumper_expressions():
-    for q in ('베드 범퍼', '베드범퍼', '범퍼침대', '침대 범퍼', '아기 범퍼'):
+    for q in ('베드 범퍼', '베드범퍼', '침대 범퍼', '아기 범퍼'):
         j = quote(q)
         # 확정표 '유아용 쿠션(범퍼형·침대 범퍼)'은 1m 이상 한 줄뿐이지만 같은 품목의 1m 미만 줄도 함께 보여 준다
         assert j['pending'] == [] and [(r['규격'], r['수수료']) for r in j['rows']] == [('가로 1m 미만', '2,000원'), ('가로 1m 이상', '3,000원')], (q, j)
@@ -551,3 +551,31 @@ def test_zz_all_customer_responses_forbidden_words():
             j = json.loads(body)
             for r in j.get('rows', []):
                 assert set(r) <= {'품목', '규격', '수수료', '안내', '분류'}, (url, r)
+
+
+def test_modifier_names_show_all_sizes():
+    """앞말이 붙은 이름(양문형냉장고·3인용소파)은 최저가 한 줄이 아니라 그 품목 규격을 보여 준다(2026-11-23 전수 검수)."""
+    fees = lambda q: [r[2] for r in rows_of(quote(q))]
+    assert fees('3인용소파') == ['7,000원']                     # 앞말이 규격에 있으면 그 줄만
+    assert len(fees('양문형냉장고')) >= 3 and '4,000원' in fees('양문형냉장고')
+    assert fees('흙침대') == ['20,000원', '30,000원']            # 흙·옥·황토침대 → 돌침대
+    j = quote('드럼세탁기')
+    assert j['rows'] and all('피아노' not in r[0] + r[1] for r in rows_of(j))
+
+
+def test_wrong_head_word_blocked():
+    """끝말만 같은 다른 물건으로 매기지 않는다."""
+    from server import service as S
+    c = S.ctx('gwacheon')
+    bad = {'전기장판': '상위어 장판', '고양이화장실': '상위어', '화이트보드': '상위어', '킥보드': '상위어', '키보드': '상위어'}
+    for q, wrong in bad.items():
+        res = S.resolve(c, q)
+        assert wrong not in str(res['result'].get('경로')), (q, res['result'])
+
+
+def test_unclear_specs_go_to_review():
+    """같은 품목·같은 규격 글자에 금액이 둘이면 고를 수 없으니 확인 후 안내."""
+    from server import service as S
+    rows = [{'item': '냉장고', 'spec': '모든규격', 'fee': 5000}, {'item': '냉장고', 'spec': '모든규격', 'fee': 7000}]
+    assert S._unclear(rows)
+    assert not S._unclear([{'item': '냉장고', 'spec': '300L 미만', 'fee': 5000}, {'item': '냉장고', 'spec': '300L 이상', 'fee': 7000}])
