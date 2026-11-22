@@ -410,3 +410,46 @@ def test_zz_all_customer_responses_forbidden_words():
             j = json.loads(body)
             for r in j.get('rows', []):
                 assert set(r) <= {'품목', '규격', '수수료', '안내', '분류'}, (url, r)
+
+
+# ------------------------------------------------------------------ 공공데이터 지자체 가져오기
+def _fake_public_rows():
+    rows = []
+    def add(ctpv, sgg, inst, items, date='2026-06-30'):
+        for nm, sp, fee, free in items:
+            rows.append({'CTPV_NM': ctpv, 'SGG_NM': sgg, 'INSTT_NM': inst, 'LAR_WAS_NM': nm, 'LAR_WAS_STNDRD': sp,
+                         'FEE': str(fee), 'PAID_FREE_YN': '무료' if free else '유료', 'DATA_STDR_DE': date})
+    base = [('장롱', '가로 120cm 이상', 15000, 0), ('장롱', '가로 120cm 미만', 10000, 0), ('소파', '1인용', 4000, 0), ('소파', '2인용 이상', 6000, 0),
+            ('냉장고', '모든규격', 5000, 0), ('세탁기', '모든규격', 5000, 0), ('의자', '모든규격', 2000, 0), ('선풍기', '모든규격', 0, 1)]
+    add('서울특별시', '강남구', '서울특별시 강남구', base)
+    add('경기도', '수원시 장안구', '경기도 수원시', base, '2026-03-01')
+    add('경기도', '과천시', '경기도 과천시', base)
+    add('부산광역시', '사하구', '부산광역시 사하구', base)
+    add('부산광역시', '중구', '부산광역시 중구', base)
+    add('전라남도', '여수시', '전라남도 여수시', base[:3])          # 5행 미만 → 건너뜀
+    return rows
+
+
+def test_importer_targets_and_codes():
+    from server import importer
+    assert importer.parse_targets('서울 전체, 경기도 전체\n부산 사하구, 경북 경산시') == [('서울', None), ('경기', None), ('부산', '사하구'), ('경북', '경산시')]
+    assert importer.roman('수원시') == 'suwonsi' and importer.muni_code('gyeonggi', '수원시') == 'gyeonggi-suwon'
+
+
+def test_importer_run():
+    from server import importer
+    a = admin()
+    rep = importer.run(_fake_public_rows(), importer.parse_targets('서울 전체, 경기 전체, 부산 사하구, 전남 여수시, 경북 경산시'), '시험')
+    names = {i['name']: i for i in rep['imported']}
+    assert set(names) == {'서울특별시 강남구', '경기도 수원시', '부산광역시 사하구'}
+    assert any(s['name'] == '경기도 과천시' for s in rep['skipped'])        # 직접 올린 과천 조례는 유지
+    assert any('여수시' in s['name'] for s in rep['skipped'])
+    assert rep['missing'] == ['경북 경산시'] and rep['spec_column'] == 'LAR_WAS_STNDRD' and names['경기도 수원시']['date'] == '2026-03-01'
+    code = names['서울특별시 강남구']['code']
+    j = cust('post', '/api/quote', json={'municipality': code, 'items': [{'name': '소파'}, {'name': '선풍기'}, {'name': '장롱'}]}).json()
+    assert j['municipality'] == '서울특별시 강남구'
+    got = [(r['품목'], r['규격'], r['수수료']) for r in j['rows']]
+    assert ('소파', '1인용', '4,000원') in got and ('선풍기', '모든규격', '무상수거') in got and ('장롱', '가로 120cm 미만', '10,000원') in got
+    ms = cust('get', '/api/municipalities').json()['items']
+    assert any(m['name'] == '경기도 과천시' and m['code'] == 'gwacheon' for m in ms)
+    assert rows_of(quote('식기세척기'))[0][2] == '4,000원'                    # 과천 확정표 그대로

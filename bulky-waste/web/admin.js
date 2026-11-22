@@ -4,7 +4,7 @@
   var $$ = function (s, el) { return Array.prototype.slice.call((el || document).querySelectorAll(s)); };
   var CATS = ['가구류', '가전·전자', '생활용품', '유아용품', '반려동물', '운동·레저', '악기·취미', '사무·기타', '목재', '기타'];
   var METHODS = ['무상수거', '종량제봉투 배출', '대상 아님(건설폐기물)'];
-  var S = { muni: 'gwacheon', tab: 'review', overview: null, status: 'open' };
+  var S = { muni: 'gwacheon', tab: 'review', overview: null, status: 'open', targets: '서울 전체, 경기 전체' };
 
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   function fmt(n) { return n == null || n === '' ? '' : Number(n).toLocaleString('ko-KR'); }
@@ -202,7 +202,13 @@
   function vOrdinance() {
     api(q('/api/admin/ordinance')).then(function (j) {
       var st = j.stats;
-      var h = '<div class="grid2"><div class="report"><b>현재 조례</b><dl class="kv" style="margin-top:6px"><dt>행 수</dt><dd>' + st.rows + '</dd>' +
+      var bs = j.basis;
+      var h = '<form id="pubf" class="report"><b>공공데이터에서 지자체 수수료표 가져오기</b> <span class="muted">(전국대형폐기물수거수수료정보표준데이터, 각 지자체 등록 기준일자 표시)</span>' +
+        '<textarea name="targets" rows="3" style="width:100%;margin-top:6px" placeholder="예: 서울 전체, 경기 전체, 부산 사하구">' + esc(S.targets || '') + '</textarea>' +
+        '<div class="form-inline"><label><input type="checkbox" name="force"> 직접 올린 조례도 덮어쓰기</label>' +
+        '<button class="btn small" type="submit" data-dry="1">미리 보기</button><button class="btn primary small" type="button" id="pubgo">가져오기</button></div><div id="pubr"></div></form>' +
+        '<div class="grid2"><div class="report"><b>현재 조례</b>' + (bs ? ' <span class="muted">출처: ' + esc(bs.source) + ' · 기준일자 ' + esc(bs.date || '-') + ' · ' + esc(bs.institution) + '</span>' : '') +
+        '<dl class="kv" style="margin-top:6px"><dt>행 수</dt><dd>' + st.rows + '</dd>' +
         '<dt>금액 격자</dt><dd><div class="chipsline">' + st.grid.map(function (g) { return '<span>' + fmt(g) + '</span>'; }).join('') + '</div></dd>' +
         '<dt>2회 이상 금액</dt><dd><div class="chipsline">' + st.grid2.map(function (g) { return '<span>' + fmt(g) + '</span>'; }).join('') + '</div></dd>' +
         '<dt>보정계수 k</dt><dd>' + st.k + ' (보정쌍 ' + st.k_pairs + ', MAD ' + st.mad + ')</dd></dl>' +
@@ -217,6 +223,18 @@
         }).join('') + '</tbody></table></div>';
       $('#view').innerHTML = h;
       $('#ordf').addEventListener('submit', function (e) { e.preventDefault(); ordUpload(e.target, '1'); });
+      var pub = function (dry) {
+        var f = $('#pubf'); S.targets = f.targets.value;
+        $('#pubr').innerHTML = '<p class="muted">공공데이터포털에서 받는 중… (1분 안팎)</p>';
+        api('/api/admin/import-public', { body: { targets: f.targets.value, force: f.force.checked, dry: dry } }).then(function (r) {
+          $('#pubr').innerHTML = '<div class="report"><p>' + (dry ? '미리 보기' : '<span class="ok">가져왔습니다</span>') + ' — ' + r.imported.length + '곳 · 규격 칸 ' + esc(r.spec_column || '없음') + ' · 기준일자 칸 ' + esc(r.date_column || '없음') + '</p>' +
+            list('가져올 지자체', r.imported.map(function (i) { return i.name + ' (' + i.rows + '행' + (i.free ? ', 무상 ' + i.free : '') + ', 기준 ' + (i.date || '-') + ')'; })) +
+            list('건너뜀', r.skipped.map(function (i) { return i.name + ': ' + i.reason; })) + list('공공데이터에 없음', r.missing) + '</div>';
+          if (!dry) refreshOverview();
+        }).catch(err);
+      };
+      $('#pubf').addEventListener('submit', function (e) { e.preventDefault(); pub(true); });
+      $('#pubgo').addEventListener('click', function () { if (confirm('가져올까요? 공공데이터로 들어온 지자체 조례는 최신 값으로 바뀝니다.')) pub(false); });
     }).catch(err);
   }
   function ordUpload(f, dry) {

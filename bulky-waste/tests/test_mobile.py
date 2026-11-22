@@ -21,7 +21,12 @@ def main():
         for name, vw, vh in (('mobile360', 360, 780), ('desktop', 1280, 900)):
             pg = b.new_page(viewport={'width': vw, 'height': vh}, device_scale_factor=2 if OUT else 1)
             pg.goto(BASE + '/')
-            pg.wait_for_selector('#muni option', state='attached')
+            pg.wait_for_selector('#where:not([hidden])')
+            if OUT:
+                pg.screenshot(path=os.path.join(OUT, f'{name}_where.png'))
+            pg.fill('#place', '과천')
+            pg.click('#placeList button >> nth=0')
+            pg.wait_for_selector('#ask:not([hidden])')
             for n in ('식기세척기', '캣타워', '전동킥보드', '화이트보드', '소파', '우산', '냉장고', '매트리스', '에어컨', '책장', '목검(나무)'):
                 pg.fill('#item', n)
                 pg.click('#add')
@@ -45,7 +50,7 @@ def main():
                 pg.screenshot(path=os.path.join(OUT, f'{name}_table.png'), full_page=True)
             # 확인 카드 흐름
             pg.goto(BASE + '/')
-            pg.wait_for_selector('#muni option', state='attached')
+            pg.wait_for_selector('#ask:not([hidden])')          # 고른 지자체는 기억된다
             pg.fill('#item', '다이슨')
             pg.click('#go')
             pg.wait_for_selector('.card .opt')

@@ -375,8 +375,9 @@ async def confirmed_import(file: UploadFile = File(...), muni: str = Form('gwach
 @router.get('/ordinance')
 def ordinance_get(muni: str = 'gwacheon', u=Depends(me)):
     _muni(muni)
+    basis = store.get_setting(f'basis:{muni}')
     return {'items': store.q('SELECT item,spec,fee,disp_item,disp_spec FROM ordinance WHERE muni=? ORDER BY ord', (muni,)),
-            'stats': S.stats(muni)}
+            'stats': S.stats(muni), 'basis': json.loads(basis) if basis else None}
 
 
 @router.get('/ordinance/export.csv')
@@ -447,10 +448,27 @@ async def ordinance_upload(file: UploadFile = File(...), muni: str = Form(...), 
         store.set_setting(f'policy:{muni}', 'hold')
     old = store.q('SELECT COUNT(*) n FROM ordinance WHERE muni=?', (muni,), one=True)['n']
     store.save_ordinance(muni, rows)
+    store.set_setting(f'source:{muni}', 'manual')
+    store.x("DELETE FROM setting WHERE key=?", (f'basis:{muni}',))
     store.bump_version()
     store.log(u['n'], '조례 업로드', f'{muni} {file.filename}', {'rows': old}, {'rows': len(rows), 'k': report['k']})
     report['applied'] = True
     return report
+
+
+@router.post('/import-public')
+async def import_public(request: Request, u=Depends(me)):
+    """공공데이터포털 표준데이터에서 지자체 수수료표를 받아 조례로 넣는다. targets 예: '서울 전체, 경기 전체, 부산 사하구'"""
+    b = await request.json()
+    from . import importer
+    try:
+        rows = natdata.cached_rows()
+    except Exception as e:
+        raise HTTPException(502, f'공공데이터포털에서 받지 못했습니다: {e}')
+    targets = importer.parse_targets(b.get('targets') or '')
+    if not targets:
+        raise HTTPException(400, "대상을 적어 주세요. 예: '서울 전체, 경기 전체, 부산 사하구'")
+    return importer.run(rows, targets, u['n'], force=bool(b.get('force')), dry=bool(b.get('dry')))
 
 
 # ---------------------------------------------------------------- 표현 사전

@@ -252,7 +252,7 @@ def seed():
     if q('SELECT 1 FROM municipality LIMIT 1', one=True):
         return False
     now = time.time()
-    x('INSERT INTO municipality(code,name,created_at) VALUES(?,?,?)', ('gwacheon', '과천시', now))
+    x('INSERT INTO municipality(code,name,created_at) VALUES(?,?,?)', ('gwacheon', '경기도 과천시', now))
     disp = {}
     p = os.path.join(DATA, 'gwacheon_display.csv')
     if os.path.exists(p):
@@ -277,6 +277,7 @@ def seed():
     set_setting('nat_updated', '2026-11-13')
     set_setting('nat_source', '내장 스냅샷(143개 기관, 248품목)')
     set_setting('policy:gwacheon', 'hold')
+    set_setting('source:gwacheon', 'manual')
     bump_version()
     log('시스템', '초기 자료 적재', '과천시', None, {'조례': len(rows), '확정표': len(conf)})
     return True
@@ -286,5 +287,9 @@ def init():
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
     SYNC.pull(force=True)
     seeded = seed()
+    if q("SELECT 1 FROM municipality WHERE code='gwacheon' AND name='과천시'", one=True):   # 이름 체계 통일(시도 붙임)
+        x("UPDATE municipality SET name='경기도 과천시' WHERE code='gwacheon'")
+        set_setting('source:gwacheon', 'manual')
+        bump_version()
     if seeded and SYNC.enabled and SYNC.current is None:
         SYNC.push()

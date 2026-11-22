@@ -42,6 +42,17 @@ def fetch_rows(per_page=10000):
     return rows, total
 
 
+_ROWS = {'at': 0, 'rows': None}
+
+
+def cached_rows(max_age=3600):
+    """같은 인스턴스에서 1시간 안에 다시 쓰면 원본을 다시 받지 않는다."""
+    if _ROWS['rows'] is None or time.time() - _ROWS['at'] > max_age:
+        rows, _ = fetch_rows()
+        _ROWS.update(at=time.time(), rows=rows)
+    return _ROWS['rows']
+
+
 def apply_rows(rows, user, source):
     lines = summarize(rows)
     if len(lines) < 50:

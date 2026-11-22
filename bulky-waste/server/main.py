@@ -160,6 +160,21 @@ def quote_get(request: Request, q: str = '', m: str = 'gwacheon'):
     return S.quote(m, [{'name': n} for n in names])
 
 
+@app.get('/api/cron/import')
+def cron_import(request: Request, key: str = '', targets: str = '', dry: str = '1', mode: str = '', force: str = '0'):
+    """운영 배치용(비밀키 필요): 공공데이터 지자체 수수료표 가져오기. mode=columns 면 원본 칸 구성만."""
+    secret = os.environ.get('CRON_SECRET')
+    if not secret or not (key == secret or request.headers.get('authorization') == f'Bearer {secret}'):
+        raise HTTPException(401, 'unauthorized')
+    from . import importer, natdata
+    rows = natdata.cached_rows()
+    if mode == 'columns':
+        return importer.columns_preview(rows)
+    if mode == 'national':
+        return natdata.apply_rows(rows, '배치', '공공데이터포털 15114146')
+    return importer.run(rows, importer.parse_targets(targets), '배치', force=force == '1', dry=dry == '1')
+
+
 @app.get('/api/cron/national')
 def cron_national(request: Request):
     secret = os.environ.get('CRON_SECRET')

@@ -30,24 +30,64 @@
     try { if (val === undefined) return localStorage.getItem(key); localStorage.setItem(key, val); } catch (e) { return null; }
   }
 
-  /* ---------- 지자체 ---------- */
+  /* ---------- 지자체 (첫 질문) ---------- */
+  var MUNIS = [];
+  function flat(s) { return String(s || '').replace(/\s+/g, ''); }
   function loadMunis() {
-    var sel = $('#muni');
     return api('/api/municipalities').then(function (j) {
-      var saved = store('bw.muni');
-      sel.innerHTML = j.items.map(function (m) { return '<option value="' + esc(m.code) + '">' + esc(m.name) + '</option>'; }).join('');
-      if (saved && j.items.some(function (m) { return m.code === saved; })) sel.value = saved;
-      state.muni = sel.value;
-      state.muniName = sel.options[sel.selectedIndex] ? sel.options[sel.selectedIndex].text : '';
-      $('#footnote').textContent = '표시된 금액은 ' + state.muniName + ' 대형폐기물 배출 수수료입니다.';
+      MUNIS = j.items;
+      var want = new URLSearchParams(location.search).get('m') || store('bw.muni');
+      var hit = MUNIS.filter(function (m) { return m.code === want; })[0];
+      if (hit) setMuni(hit, true); else askWhere();
     });
   }
-  $('#muni').addEventListener('change', function (e) {
-    state.muni = e.target.value; store('bw.muni', state.muni);
-    state.muniName = e.target.options[e.target.selectedIndex].text;
-    $('#footnote').textContent = '표시된 금액은 ' + state.muniName + ' 대형폐기물 배출 수수료입니다.';
+  function askWhere() {
+    $('#where').hidden = false; $('#ask').hidden = true; $('#muniPill').hidden = true;
     resetOut();
+    var p = $('#place'); p.value = ''; renderPlaces(''); setTimeout(function () { p.focus(); }, 50);
+  }
+  function setMuni(m, quiet) {
+    state.muni = m.code; state.muniName = m.name; store('bw.muni', m.code);
+    $('#muniName').textContent = m.name; $('#muniPill').hidden = false;
+    $('#where').hidden = true; $('#ask').hidden = false;
+    $('#footnote').textContent = '표시된 금액은 ' + m.name + ' 대형폐기물 배출 수수료입니다.';
+    resetOut();
+    if (!quiet) setTimeout(function () { $('#item').focus(); }, 50);
+  }
+  function matches(q) {
+    q = flat(q).replace(/(특별시|광역시|특별자치시|특별자치도)$/, '');
+    if (!q) return [];
+    var starts = [], has = [];
+    MUNIS.forEach(function (m) {
+      var parts = m.name.split(' '); var last = flat(parts[parts.length - 1]); var all = flat(m.name);
+      if (last.indexOf(q) === 0 || last.replace(/(시|군|구)$/, '') === q) starts.push(m);
+      else if (all.indexOf(q) >= 0) has.push(m);
+    });
+    return starts.concat(has).slice(0, 12);
+  }
+  function renderPlaces(q) {
+    var list = matches(q);
+    var ul = $('#placeList');
+    ul.innerHTML = list.map(function (m, i) {
+      return '<li><button type="button" role="option" data-code="' + esc(m.code) + '"' + (i === 0 ? ' aria-selected="true"' : '') + '>' + esc(m.name) + '</button></li>';
+    }).join('');
+    $('#place').setAttribute('aria-expanded', list.length ? 'true' : 'false');
+    var msg = $('#placeMsg');
+    if (!q.trim()) msg.textContent = '시·군·구 이름을 입력하면 목록이 나옵니다. (현재 ' + MUNIS.length + '곳 안내)';
+    else if (!list.length) msg.textContent = '아직 안내하지 않는 지역입니다. 이름을 다시 확인해 주세요.';
+    else msg.textContent = '';
+  }
+  $('#place').addEventListener('input', function (e) { renderPlaces(e.target.value); });
+  $('#where').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var list = matches($('#place').value);
+    if (list.length) setMuni(list[0]); else renderPlaces($('#place').value);
   });
+  $('#placeList').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-code]'); if (!b) return;
+    setMuni(MUNIS.filter(function (m) { return m.code === b.dataset.code; })[0]);
+  });
+  $('#muniPill').addEventListener('click', askWhere);
 
   /* ---------- 입력 ---------- */
   function splitNames(s) {
@@ -355,6 +395,7 @@
 
   loadMunis().then(function () {
     var sp = new URLSearchParams(location.search);
+    if (sp.get('q') && $('#ask').hidden) return;
     var t = sp.get('t');
     if (t) showTicket(t);
     var qq = sp.get('q');
