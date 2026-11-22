@@ -47,19 +47,19 @@
 - 공공데이터 반영: `/api/cron/import?key=…&targets=서울 전체, 경기 전체&dry=0`
 
 ## 6. 다음 할 일 (우선순위)
-1. **PC에 있는 API 키 파일 찾기** — `sk-ant`(Anthropic), `NAVER_CLIENT`, `.env` 검색 → Vercel 환경변수 등록 → 재배포 → `/api/cron/ai` 로 확인.
+1. ~~PC에 있는 API 키 파일 찾기~~ — 2026-11-22 완료(ANTHROPIC_API_KEY 등록·Claude 호출 확인). NAVER 키는 PC에 없음.
    - ANTHROPIC_API_KEY 가 들어가면 `ai._anthropic()` 이 먼저 쓰인다(모델 기본 `claude-haiku-5-5`, `ANTHROPIC_MODEL`로 변경).
 2. (선택) AI Gateway 유료 크레딧 $5~10 충전 → 코드 수정 없이 Claude Haiku 로 자동 전환.
 3. **수집표 품질 점검** — 은평구처럼 옛 표·비교표가 섞인 곳이 없는지 49곳 `data/collected/*.csv` 점검
    (수수료 500원 미만·같은 품목 중복·규격에 '<신 설>' 같은 표식 등). 고치면 `mode=collected&force=1` 로 반영.
 4. 휴대폰 실기기로 키보드가 입력창을 가리지 않는지 확인(지금은 Playwright 시뮬레이션으로만 확인).
 5. (선택) 문자 자동 발송 — 솔라피/NHN 등 계정이 생기면 운영자 '확정' 시 연락처로 자동 문자.
-7. **시연용 앱에 장바구니 이식** — 결과 아래 버튼은 '장바구니에 담기' 하나(2026-11-22). 규격이 여러 개인 품목은 줄을 눌러 하나 고른 뒤 담는다.
+6. 베드 범퍼처럼 자주 묻는 미등재 품목은 `catalog.EQUIV` 에 규칙 추가(운영 화면 '표현 사전'으로도 가능).
+7. **시연용 앱에 장바구니 이식** — 결과 아래 버튼은 '장바구니에 담기' 하나(2026-11-22, 커밋 7791b64. Vercel 무료 일일 배포 한도 100회에 걸려 운영 반영은 다음 날 재배포 필요). 규격이 여러 개인 품목은 줄을 눌러 하나 고른 뒤 담는다.
    - 코드: `web/app.js` 의 `/* 장바구니 */` 구역(`addToCart`·`cartHTML`·`renderCart`·`openCart`·`cartRows`·`cartText`), `groups`·`pickBox`, 머리 `#cartBtn`, `style.css` 끝 `/* 장바구니 */`.
    - 내려받기: `POST /api/quote/export` 에 행마다 `수량` 을 넣으면 수량·금액 칸과 합계 줄이 붙는다(없으면 예전 4칸 그대로).
    - 장바구니는 메모리에만 있고(새로고침하면 비움), 지역을 바꾸면 비운다(수수료가 지역마다 다름).
    - 지역은 기억하지 않는다: 예전 `localStorage['bw.muni']` 는 첫 로드 때 지운다.
-6. 베드 범퍼처럼 자주 묻는 미등재 품목은 `catalog.EQUIV` 에 규칙 추가(운영 화면 '표현 사전'으로도 가능).
 
 ## 7. 로컬에서 시작
 ```bash
