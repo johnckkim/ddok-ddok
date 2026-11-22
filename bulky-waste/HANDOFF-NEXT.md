@@ -65,6 +65,14 @@
      ③ `ReactNativeWebView.postMessage(JSON)` ④ iframe이면 `parent.postMessage(item)` 로 보낸다.
      item = `{type:'bw:add-to-cart', municipality, municipalityName, item(조례 한국어 이름), spec, fee(숫자|null), feeText, note, qty:1}`.
      앱에 심을 때는 ②나 ③을 받아 실제 장바구니(스티커 결제)에 넣으면 된다.
+   - **조례에 없는 품목 = 기타 + 금액**(2026-11-23 결정): 다른 항목 이름으로 안내하지 않고 고객이 쓴 제품명 그대로 계산 금액을 안내한다
+     (과천 확정표 크기 구분 × 지역 금액 수준 → 전국 통계 × 지역 수준 → AI가 고른 비슷한 품목의 규격·금액 순, 근거 없으면 확인 후 안내).
+     금액은 1,000원 단위. API 행의 `담기` 칸이 '기타'면 장바구니 품목은 '기타', 아니면 조례 품목명.
+     앱 카탈로그의 기타는 `category '기타' / item_name '금액'` 세 줄(1,000·5,000·10,000원, 과천 데모 id gc142~gc144)뿐이라
+     연동 item에 `etcLines:[{category,item_name:'금액',item_specification,price,count}]`(예: 7,000원 → 5,000×1 + 1,000×2)를 실어 보낸다.
+     앱 `UserCartController.add()`는 같은 discharge_item_id 줄을 바꿔치기하므로, 기타 금액 줄은 **수량을 더해서** 넣어야 한다.
+     제품명(`productName`)은 앱 장바구니엔 안 보이므로 주문 메모·조례 보완 자료로 따로 저장할 것.
+     앱 데모 AI 화면(`demo_ai_fee_screen.dart`)은 아직 `담기`를 모른다 — 기타 행이면 위 금액 줄로 담도록 바꿀 것.
 
 ## 7. 로컬에서 시작
 ```bash

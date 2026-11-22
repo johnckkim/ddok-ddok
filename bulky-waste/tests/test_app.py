@@ -519,8 +519,9 @@ def test_shopping_rescues_pending_item(fake_shop):
     assert quote('냥냥하우스 3단')['pending'] == ['냥냥하우스 3단']
 
 
-def test_ai_picks_ordinance_item_then_yes():
-    """조례에서 못 찾은 이름 → AI가 조례 품목명 중 고름 → '○○ 맞으신가요?' → 예 → 조례 금액. 목록에 없는 이름은 버린다."""
+def test_ai_estimate_keeps_product_name_and_cart_etc():
+    """조례에 없는 이름 → AI가 비슷한 조례 품목을 고르면 그 규격·금액으로, 제품명 그대로 안내하고 장바구니는 '기타'.
+    '○○ 항목으로 내놓으시면' 같은 대체 질문은 하지 않는다(2026-11-23 결정). 목록에 없는 이름은 버린다."""
     from server import ai
     seen = {}
 
@@ -530,12 +531,9 @@ def test_ai_picks_ordinance_item_then_yes():
     ai._TEST[:] = [fake]
     try:
         j = quote('냥이궁전 대형')
-        card = j['needs_confirm'][0]
-        assert j['pending'] == [] and card['kind'] == 'yesno' and card['item_label'] == '캣타워' and card['as_item']
+        assert j['pending'] == [] and not j['needs_confirm']
         assert '캣타워' in seen['p'] and '냥이궁전 대형' in seen['p']
-        r = cust('post', f"/api/confirm/{card['card_id']}", json={'answer': 'yes', 'size': '높이 1m 이상'}).json()
-        assert r['status'] == 'ok' and r['rows'][0]['수수료'] == '5,000원'
-        assert r['rows'][0]['품목'] == '냥이궁전 대형' and r['rows'][0]['안내'] == '‘캣타워’ 항목으로 배출'
+        assert [(r['품목'], r['규격'], r['수수료'], r['안내'], r['담기']) for r in j['rows']] ==             [('냥이궁전 대형', '높이 1m 미만', '3,000원', '', '기타'), ('냥이궁전 대형', '높이 1m 이상', '5,000원', '', '기타')]
         ai._TEST[:] = [lambda p: '{"items": [], "what": ""}']
         assert quote('알수없는물건 특대')['pending'] == ['알수없는물건 특대']
     finally:
@@ -553,7 +551,7 @@ def test_zz_all_customer_responses_forbidden_words():
         if url.startswith('/api/') and body.startswith('{'):
             j = json.loads(body)
             for r in j.get('rows', []):
-                assert set(r) <= {'품목', '규격', '수수료', '안내', '분류'}, (url, r)
+                assert set(r) <= {'품목', '규격', '수수료', '안내', '분류', '담기'}, (url, r)
 
 
 def test_modifier_names_show_all_sizes():
@@ -681,3 +679,14 @@ def test_missing_item_uses_reference_sizes_scaled():
     g = S.ctx('gwacheon')
     rows = S._ref_scaled(g, '캣타워', '캣타워')
     assert rows is None                                   # 과천 자신은 환산하지 않는다
+
+
+def test_etc_fee_rounds_to_app_amount_units():
+    """조례에 없는 품목은 앱 '기타 > 금액'(1,000/5,000/10,000원)으로 담기므로 1,000원 단위."""
+    from server import service as S
+    assert [S._etc_fee(f) for f in (400, 1500, 2400, 2500, 6000, None)] == [1000, 2000, 2000, 3000, 6000, None]
+    res = {'kind': 'rows', 'result': {'등급': 'L3 전국 통계×지역 보정', '경로': '전국 캣타워 중앙값 3000×k'},
+           'rows': [{'item': '캣타워', 'spec': '높이 1m 미만', 'fee': 2500, 'note': '‘신발장’ 항목으로 배출'}]}
+    S._mark_cart(res)
+    o = res['rows'][0]
+    assert o['cart'] == '기타' and o['fee'] == 3000 and o['note'] == ''

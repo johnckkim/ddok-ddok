@@ -497,7 +497,35 @@ def resolve(c, q, label=None, expr=None):
             if not kept:
                 return {'kind': 'pending', 'rows': res['rows'], 'result': dict(res['result'], 경로=path + ' (맞는 규격 없음)'), 'review': True}
             res['rows'] = kept
+        _mark_cart(res)
     return res
+
+
+_SUBST = ('유사품목', '같은 배출', '과천 기준', '전국', '근거 없음', 'AI 추정', '전동형 → 수동형')
+_NOTE_SUBST = re.compile(r'\s*·?\s*‘[^’]*’\s*항목으로\s*배출\s*·?\s*')
+
+
+def _etc_fee(f):
+    # 앱의 '기타 > 금액'은 1,000·5,000·10,000원 단위만 있으므로 조례에 없는 품목 금액은 1,000원 단위로(반올림, 최소 1,000)
+    return max(1000, int(f / 1000 + 0.5) * 1000) if f else f
+
+
+def _mark_cart(res):
+    # 조례에 있는 품목이면 그 조례 품목으로, 없으면(계산해서 안내) 장바구니에 '기타'로 담는다.
+    # 조례에 없는 품목은 다른 항목 이름으로 안내하지 않고 고객이 쓴 제품명 그대로 둔다(조례 보완 자료).
+    r = res.get('result') or {}
+    path, grade = str(r.get('경로') or ''), str(r.get('등급') or '')
+    subst = any(k in path for k in _SUBST) or grade.startswith(('L2*', 'L3', 'L4'))
+    clean = lambda n: re.sub(r'\s+', ' ', re.sub(r'\s*\(\d+\)\s*', ' ', n or '')).strip()
+    for o in res.get('rows') or []:
+        if o.get('method'):
+            o['cart'] = None
+        elif subst:
+            o['cart'] = '기타'
+            o['fee'] = _etc_fee(o.get('fee'))
+            o['note'] = _NOTE_SUBST.sub(' · ', o.get('note') or '').strip(' ·')
+        else:
+            o['cart'] = clean(o.get('src') or o.get('item'))
 
 
 REF_MUNI = 'gwacheon'      # 확정표가 갖춰진 기준 지자체(조례에 없는 품목의 크기 구분·금액 비율 기준)
@@ -623,6 +651,7 @@ def public_rows(c, rows, q=None):
         out.append({'품목': o['item'], '규격': o['spec'],
                     '수수료': o.get('method') or _fee_text(o['fee']),
                     '안내': o.get('note') or '',
+                    '담기': o.get('cart') if 'cart' in o else o['item'],      # 장바구니에 담을 조례 품목('기타' = 조례에 없는 품목)
                     '분류': _category(c, o['item'], q or o['item'])})
     return out
 
@@ -795,6 +824,38 @@ def _own_rows(c, x, label):
     rows = _group_rows(own, label)
     for o in rows:
         o['item'] = label
+    return rows
+
+
+def _ai_estimate(c, name):
+    # 조례에 없는 품목: AI가 이 지역 조례에서 크기·쓰임이 비슷한 품목을 고르면 그 규격·금액을 바탕으로
+    # 고객이 쓴 제품명 그대로 안내한다(다른 품목 이름으로 안내하지 않음). 장바구니는 '기타'.
+    if not ai.available():
+        return None
+    clean = lambda n: re.sub(r'\s*\(\d+\)\s*', ' ', n or '').strip()
+    names = [clean(x['disp_item'] or x['name']) for x in c.local] + [x['name'] for x in c.conf]
+    names = [n for n in names if not C.CATCH_ALL.search(n)]
+    label = _label_for(c, name)
+    for p in ai.pick_items(c.muni, c.name, name, names):
+        own = _own_rows(c, p, label)
+        if not own or _not_one_object(own, p) or _unclear(own) or any(not o.get('fee') for o in own):
+            continue
+        own = _age_fit(name, own)
+        for o in own:
+            o.update(item=label, note='', cart='기타', src=p, fee=_etc_fee(o['fee']))
+        return own
+    return None
+
+
+def _engine_estimate(c, name, res):
+    # AI도 없으면 엔진 계산값(전국 통계×지역 수준, 없으면 지역 최빈 금액)을 제품명 그대로·기타로 안내
+    if str((res.get('result') or {}).get('등급') or '').startswith('L4'):
+        return None                      # 근거 없는 최빈 금액은 계산이 아니다 → 확인 후 안내
+    rows = [dict(o) for o in (res.get('rows') or []) if o.get('fee')]
+    if not rows or _unclear(rows):
+        return None
+    for o in rows:
+        o.update(item=_label_for(c, name), cart='기타', fee=_etc_fee(o['fee']), note=_NOTE_SUBST.sub(' · ', o.get('note') or '').strip(' ·'))
     return rows
 
 
@@ -1074,9 +1135,14 @@ def quote(muni, items):
             if res.get('review'):          # 정책 '바로 보여주기'여도 운영자 확정은 받는다
                 enqueue_review(c, name, _label_for(c, name), res)
         elif res['kind'] == 'pending':
-            card = _shop_rescue(c, name) or _ai_rescue(c, name)
+            card = _shop_rescue(c, name)          # 쇼핑몰 분류로 '무엇인지' 확인(캣타워 맞으신가요?)은 유지
             if card:
                 cards.append(card)
+                continue
+            est = _ai_estimate(c, name) or _engine_estimate(c, name, res)
+            if est:
+                rows += est
+                enqueue_review(c, name, _label_for(c, name), dict(res, rows=est))   # 계산값은 운영자 확인 대기열에도
             else:
                 pend.append((name, _label_for(c, name), res))
         else:

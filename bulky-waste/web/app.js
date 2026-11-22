@@ -409,9 +409,11 @@
   }
   function pushCart(pick) {
     pick.forEach(function (r) {
+      var etc = r['담기'] === '기타';            // 조례에 없는 품목: 장바구니에는 '기타' + 금액, 제품명은 함께 보관
       var hit = state.cart.filter(function (c) { return c.item === r['품목'] && c.spec === r['규격'] && c.fee === r['수수료']; })[0];
       if (hit) hit.qty = Math.min(99, hit.qty + 1);
-      else state.cart.push({ item: r['품목'], spec: r['규격'], fee: r['수수료'], note: r['안내'] || '', qty: 1,
+      else state.cart.push({ item: r['품목'], spec: r['규격'], fee: r['수수료'], note: r['안내'] || '', qty: 1, etc: etc,
+        cartItem: r['담기'] || r['품목'],
         dItem: r._item || r['품목'], dSpec: r._spec || r['규격'], dNote: r._note || r['안내'] || '', dFee: r._fee || r['수수료'] });
       bridge(r);
     });
@@ -425,9 +427,23 @@
        3) window.ReactNativeWebView.postMessage — RN 웹뷰
        4) window.parent.postMessage            — iframe 으로 심었을 때
      item = { type, municipality(코드), municipalityName, item(조례 한국어 이름), spec, fee(숫자 또는 null), feeText, note, qty:1 } */
+  /* 앱 '기타 > 금액'은 1,000·5,000·10,000원 세 가지를 수량으로 담는다: 7,000원 → 5,000×1 + 1,000×2 */
+  function etcPieces(n) {
+    var out = [];
+    [10000, 5000, 1000].forEach(function (p) { var k = Math.floor(n / p); if (k) { out.push({ price: p, count: k }); n -= p * k; } });
+    return out;
+  }
   function bridge(r) {
+    var etc = r['담기'] === '기타';
     var item = { type: 'bw:add-to-cart', municipality: state.muni, municipalityName: state.muniName,
-      item: r['품목'], spec: r['규격'], fee: feeNum(r['수수료']), feeText: r['수수료'], note: r['안내'] || '', qty: 1 };
+      item: etc ? '기타' : (r['담기'] || r['품목']),            // 장바구니 품목: 조례 품목명, 조례에 없으면 '기타'
+      productName: r['품목'],                                   // 고객이 말한 제품명(조례 보완 자료)
+      spec: etc ? '' : r['규격'], sizeHint: r['규격'], fee: feeNum(r['수수료']), feeText: r['수수료'],
+      etc: etc, note: r['안내'] || '', qty: 1,
+      // 기타일 때 앱 장바구니에 넣을 줄: 카탈로그 '기타 > 금액'(1,000/5,000/10,000원) × 수량
+      etcLines: etc && feeNum(r['수수료']) ? etcPieces(feeNum(r['수수료'])).map(function (x) {
+        return { category: '기타', item_name: '금액', item_specification: '금액', price: x.price, count: x.count };
+      }) : [] };
     try { window.dispatchEvent(new CustomEvent('bw:add-to-cart', { detail: item })); } catch (e) { /* 무시 */ }
     try { if (window.UdongCart && typeof window.UdongCart.add === 'function') window.UdongCart.add(item); } catch (e) { /* 무시 */ }
     try { if (window.ReactNativeWebView) window.ReactNativeWebView.postMessage(JSON.stringify(item)); } catch (e) { /* 무시 */ }
@@ -461,10 +477,12 @@
     var tt = cartTotal();
     return '<p class="lead">' + esc(t('cartTitle')) + ' · ' + esc(state.muniDisp) + '</p><ul class="cartlist">' + state.cart.map(function (c, k) {
       var n = feeNum(c.fee);
-      return '<li><div class="ci"><span class="nm">' + esc(c.dItem) + (c.dItem !== c.item ? ' <small class="ko">' + esc(c.item) + '</small>' : '') + '</span>' +
+      return '<li><div class="ci"><span class="nm">' + (c.etc ? '<span class="etc-tag">' + esc(t('etc')) + '</span> ' : '') + esc(c.dItem) +
+        (c.dItem !== c.item ? ' <small class="ko">' + esc(c.item) + '</small>' : '') + '</span>' +
         '<span class="sp">' + esc(c.dSpec) + '</span>' +
         (c.dNote ? '<span class="nt">' + esc(c.dNote) + '</span>' : '') +
-        (isUnit(c) ? '<span class="nt unit">' + esc(t('unitQty')) + '</span>' : '') + '</div>' +
+        (isUnit(c) ? '<span class="nt unit">' + esc(t('unitQty')) + '</span>' : '') +
+        (c.etc && feeNum(c.fee) ? '<span class="nt">' + esc(t('etcPay')) + ' ' + etcPieces(feeNum(c.fee)).map(function (x) { return won(x.price) + '×' + x.count; }).join(' + ') + '</span>' : '') + '</div>' +
         '<div class="cq"><button type="button" data-cart="dec" data-n="' + k + '" aria-label="' + esc(c.dItem + ' ' + t('minus')) + '">−</button>' +
         '<b>' + c.qty + '</b><button type="button" data-cart="inc" data-n="' + k + '" aria-label="' + esc(c.dItem + ' ' + t('plus')) + '">+</button></div>' +
         '<span class="fe">' + (n === null ? esc(c.dFee) : won(n * c.qty)) + '</span>' +
@@ -488,13 +506,16 @@
     state.cartEl = addBot(cartHTML(), 'result cart');
   }
   function cartRows() {      // 내려받기는 한국어 원문(스티커 구매·신고에 쓰는 이름)
-    return state.cart.map(function (c) { return { '품목': c.item, '규격': c.spec, '수수료': c.fee, '안내': c.note, '수량': c.qty }; });
+    return state.cart.map(function (c) {
+      return c.etc ? { '품목': '기타', '규격': c.spec, '수수료': c.fee, '안내': '제품명: ' + c.item + (c.note ? ' · ' + c.note : ''), '수량': c.qty }
+        : { '품목': c.cartItem || c.item, '규격': c.spec, '수수료': c.fee, '안내': c.note, '수량': c.qty };
+    });
   }
   function cartText() {
     var tt = cartTotal();
     return [t('cartTextHead', { m: state.muniDisp })].concat(state.cart.map(function (c) {
       var n = feeNum(c.fee);
-      return c.dItem + (c.dItem !== c.item ? ' [' + c.item + ']' : '') + ' (' + c.dSpec + ') ' + (n === null ? c.dFee : won(n)) + ' × ' + c.qty +
+      return (c.etc ? t('etc') + ' - ' : '') + c.dItem + (c.dItem !== c.item ? ' [' + c.item + ']' : '') + ' (' + c.dSpec + ') ' + (n === null ? c.dFee : won(n)) + ' × ' + c.qty +
         (n === null ? '' : ' = ' + won(n * c.qty)) + (c.dNote ? ' · ' + c.dNote : '');
     })).concat([t('total') + ' ' + won(tt.sum)]).join('\n');
   }
