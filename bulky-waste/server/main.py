@@ -167,6 +167,8 @@ def cron_import(request: Request, key: str = '', targets: str = '', dry: str = '
     if not secret or not (key == secret or request.headers.get('authorization') == f'Bearer {secret}'):
         raise HTTPException(401, 'unauthorized')
     from . import importer, natdata
+    if mode == 'collected':
+        return importer.import_collected(os.path.join(ROOT, 'data', 'collected'), '배치', force=force == '1', dry=dry == '1')
     rows = natdata.cached_rows()
     if mode == 'columns':
         return importer.columns_preview(rows)

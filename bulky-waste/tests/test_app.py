@@ -453,3 +453,19 @@ def test_importer_run():
     ms = cust('get', '/api/municipalities').json()['items']
     assert any(m['name'] == '경기도 과천시' and m['code'] == 'gwacheon' for m in ms)
     assert rows_of(quote('식기세척기'))[0][2] == '4,000원'                    # 과천 확정표 그대로
+
+
+def test_import_collected_rules(tmp_path):
+    from server import importer
+    good = '품목,규격,수수료\n' + '\n'.join(f'품목{i},모든규격,{2000 + i * 100}' for i in range(25)) + '\n폐가전,모든규격,0\n'
+    (tmp_path / '서울_시험구.csv').write_text(good, encoding='utf-8')
+    (tmp_path / '서울_시험구.json').write_text('{"name":"서울특별시 시험구","source_url":"https://www.test.go.kr/x"}', encoding='utf-8')
+    (tmp_path / '서울_블로그구.csv').write_text(good, encoding='utf-8')
+    (tmp_path / '서울_블로그구.json').write_text('{"source_url":"https://blog.naver.com/x"}', encoding='utf-8')
+    (tmp_path / '서울_작은구.csv').write_text('품목,규격,수수료\n소파,1인용,3000\n', encoding='utf-8')
+    (tmp_path / '서울_작은구.json').write_text('{"source_url":"https://www.small.go.kr/x"}', encoding='utf-8')
+    r = importer.import_collected(str(tmp_path), '시험')
+    assert [i['name'] for i in r['imported']] == ['서울특별시 시험구'] and r['imported'][0]['free'] == 1
+    assert {x['file'] for x in r['rejected']} == {'서울_블로그구.csv', '서울_작은구.csv'}
+    j = cust('post', '/api/quote', json={'municipality': r['imported'][0]['code'], 'items': [{'name': '폐가전'}]}).json()
+    assert j['rows'][0]['수수료'] == '무상수거'

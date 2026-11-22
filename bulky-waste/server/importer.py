@@ -222,3 +222,78 @@ def columns_preview(rows, n=3):
             if k not in keys:
                 keys.append(k)
     return {'columns': keys, 'sample': rows[:n], 'total': len(rows)}
+
+
+OFFICIAL = ('.go.kr', '.or.kr', '.seoul.kr', '.busan.kr', '.daegu.kr', '.incheon.kr', '.ulsan.kr')
+
+
+def import_collected(folder, user, force=False, dry=False):
+    """data/collected/<시도>_<시군구>.csv(+.json): 공공데이터에 없는 지자체를 공식 홈페이지·조례 별표에서 옮긴 표.
+    출처가 공공 도메인이 아니거나 유료 품목이 20행 미만이면 넣지 않는다."""
+    import csv, os
+    from .catalog import classify
+    out = {'imported': [], 'rejected': []}
+    if not os.path.isdir(folder):
+        return out
+    now = time.time()
+    for fn in sorted(os.listdir(folder)):
+        if not fn.endswith('.csv'):
+            continue
+        base = fn[:-4]
+        meta = {}
+        mp = os.path.join(folder, base + '.json')
+        if os.path.exists(mp):
+            try:
+                meta = json.load(open(mp, encoding='utf-8'))
+            except Exception:
+                meta = {}
+        sd_short, _, sgg = base.partition('_')
+        sido = sido_of(sd_short)
+        if not sido or not sgg:
+            out['rejected'].append({'file': fn, 'reason': '파일 이름 형식'})
+            continue
+        rows, free, bad = [], [], 0
+        with open(os.path.join(folder, fn), encoding='utf-8-sig') as f:
+            for r in csv.DictReader(f):
+                item = re.sub(r'\s+', ' ', (r.get('품목') or '')).strip()
+                spec = re.sub(r'\s+', ' ', (r.get('규격') or '')).strip() or '모든규격'
+                fee = store.parse_fee(r.get('수수료'))
+                if not item:
+                    continue
+                if fee == 0:
+                    free.append((item, spec))
+                elif fee and 100 <= fee <= 300000:
+                    rows.append({'item': item, 'spec': spec, 'fee': fee, 'disp_item': '', 'disp_spec': ''})
+                else:
+                    bad += 1
+        url = str(meta.get('source_url') or '')
+        host = re.sub(r'^https?://', '', url).split('/')[0]
+        if len(rows) < 20 or not host.endswith(OFFICIAL):
+            out['rejected'].append({'file': fn, 'reason': f'유료 {len(rows)}행, 출처 {host or "없음"}'})
+            continue
+        name = meta.get('name') or f'{sido[1]} {sgg}'
+        exist = store.q('SELECT code, name FROM municipality WHERE name=? OR name=?', (name, f'{sido[1]} {sgg}'), one=True)
+        code = exist['code'] if exist else muni_code(sido[2], sgg)
+        if exist and store.get_setting(f'source:{code}', 'manual') in ('manual', 'public') and not force:
+            out['rejected'].append({'file': fn, 'reason': '이미 다른 출처로 등록됨'})
+            continue
+        item = {'name': name, 'code': code, 'rows': len(rows), 'free': len(free), 'bad': bad, 'source': url,
+                'date': meta.get('basis_date') or ''}
+        out['imported'].append(item)
+        if dry:
+            continue
+        if not exist:
+            store.x('INSERT INTO municipality(code,name,created_at) VALUES(?,?,?)', (code, name, now))
+            store.set_setting(f'policy:{code}', 'hold')
+        store.save_ordinance(code, rows)
+        store.set_setting(f'source:{code}', 'web')
+        store.set_setting(f'basis:{code}', json.dumps({'source': url, 'date': item['date'], 'institution': meta.get('source_type', ''),
+                                                       'imported': time.strftime('%Y-%m-%d')}, ensure_ascii=False))
+        store.x("DELETE FROM confirmed WHERE muni=? AND updated_by='공공데이터 무상'", (code,))
+        if free:
+            store.xmany('INSERT INTO confirmed(muni,item,spec,fee,method,category,updated_at,updated_by) VALUES(?,?,?,?,?,?,?,?)',
+                        [(code, it, sp, None, '무상수거', classify(it), now, '공공데이터 무상') for it, sp in dict.fromkeys(free)])
+    if not dry and out['imported']:
+        store.bump_version()
+        store.log(user, '공식 홈페이지 수수료표 가져오기', f"{len(out['imported'])}곳", None, {'imported': [i['name'] for i in out['imported']]})
+    return out
