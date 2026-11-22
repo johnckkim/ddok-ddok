@@ -213,7 +213,8 @@ def cron_ai(request: Request, key: str = '', q: str = '베드 범퍼', m: str = 
     picks = ai.pick_items(c.muni, c.name, q, names) if names else []
     return {'available': ai.available(), 'model': ai.LAST.get('model') or ai._MODEL.get('id'), 'picks': picks,
             'skipped': sorted(ai._MODEL.get('bad') or []), 'tries': ai.LAST.get('tries'), 'candidates': (ai._MODEL.get('list') or [])[:30],
-            'error': ai.LAST.get('error'), 'quote': S.quote(m, [{'name': q}])}
+            'error': ai.LAST.get('error'), 'anthropic_key': bool(os.environ.get('ANTHROPIC_API_KEY')),
+            'anthropic': ai.LAST.get('anthropic'), 'quote': S.quote(m, [{'name': q}])}
 
 
 @app.get('/api/cron/national')

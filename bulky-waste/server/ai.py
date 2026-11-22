@@ -84,9 +84,16 @@ def _anthropic(prompt):
 def _chat(prompt, only=None, budget=None):
     if os.environ.get('ANTHROPIC_API_KEY') and not only:
         try:
-            return _anthropic(prompt)
-        except Exception as e:      # 실패하면 AI Gateway 로
-            LAST['error'] = f'anthropic: {type(e).__name__}: {e}'[:300]
+            out = _anthropic(prompt)
+            LAST['anthropic'] = 'ok'
+            return out
+        except Exception as e:      # 실패하면 AI Gateway 로(이유는 점검 화면에 남긴다)
+            body = ''
+            try:
+                body = e.read().decode('utf-8', 'replace')[:200] if hasattr(e, 'read') else ''
+            except Exception:
+                pass
+            LAST['error'] = LAST['anthropic'] = f'anthropic: {type(e).__name__}: {e} {body}'[:300]
     return _gateway(prompt, only, budget)
 
 
