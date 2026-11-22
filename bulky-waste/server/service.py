@@ -515,7 +515,8 @@ def _mark_cart(res):
     # 조례에 없는 품목은 다른 항목 이름으로 안내하지 않고 고객이 쓴 제품명 그대로 둔다(조례 보완 자료).
     r = res.get('result') or {}
     path, grade = str(r.get('경로') or ''), str(r.get('등급') or '')
-    subst = any(k in path for k in _SUBST) or grade.startswith(('L2*', 'L3', 'L4'))
+    # 확정표(L1)는 운영자가 정한 금액이지 조례 품목이 아니다 → 앱 카탈로그(=조례)에 없으므로 기타
+    subst = any(k in path for k in _SUBST) or grade.startswith(('L1', 'L2*', 'L3', 'L4'))
     clean = lambda n: re.sub(r'\s+', ' ', re.sub(r'\s*\(\d+\)\s*', ' ', n or '')).strip()
     for o in res.get('rows') or []:
         if o.get('method'):
