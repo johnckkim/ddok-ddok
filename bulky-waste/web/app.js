@@ -715,7 +715,16 @@
   applyStatic();
   api('/api/municipalities').then(function (j) {
     MUNIS = j.items;
-    return prepareMunis().then(function () {
+    MUNIS.forEach(function (m) { m.disp = m.name; });
+    // 첫 질문은 바로 띄우고, 지역 이름 번역은 뒤에서(오래 걸려도 기다리게 하지 않는다)
+    var first = ko() ? Promise.resolve() : Promise.race([prepareMunis(), new Promise(function (r) { setTimeout(r, 1500); })]);
+    return first.then(function () {
+      if (!ko()) prepareMunis().then(function () {
+        var chip = document.querySelector('[data-place="gwacheon"]');
+        var g = MUNIS.filter(function (m) { return m.code === 'gwacheon'; })[0];
+        if (chip && g) chip.textContent = g.disp || g.name;
+        if (state.muni) { var m = MUNIS.filter(function (x) { return x.code === state.muni; })[0]; if (m) { state.muniDisp = m.disp; $('#muniName').textContent = m.disp; } }
+      });
       var sp = new URLSearchParams(location.search);
       var hit = MUNIS.filter(function (m) { return m.code === sp.get('m'); })[0];
       if (sp.get('t')) showTicket(sp.get('t'));

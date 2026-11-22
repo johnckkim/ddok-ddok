@@ -69,22 +69,22 @@ def model():
     return _MODEL.get('id') or (candidates() or PREFER)[0]
 
 
-def _anthropic(prompt):
+def _anthropic(prompt, timeout=None):
     """ANTHROPIC_API_KEY 가 있으면 Claude API를 바로 쓴다(빠르고 판단이 좋다)."""
     m = os.environ.get('ANTHROPIC_MODEL', 'claude-haiku-5-5')
     req = urllib.request.Request('https://api.anthropic.com/v1/messages', method='POST', data=json.dumps({
         'model': m, 'max_tokens': 4000, 'output_config': {'effort': os.environ.get('ANTHROPIC_EFFORT', 'low')}, 'messages': [{'role': 'user', 'content': prompt}]}).encode(),
         headers={'x-api-key': os.environ['ANTHROPIC_API_KEY'], 'anthropic-version': '2023-06-01', 'content-type': 'application/json'})
-    with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
+    with urllib.request.urlopen(req, timeout=timeout or TIMEOUT) as r:
         out = json.loads(r.read().decode('utf-8'))
     LAST['model'] = m
     return ''.join(b.get('text', '') for b in out.get('content', []) if b.get('type') == 'text')
 
 
-def _chat(prompt, only=None, budget=None):
+def _chat(prompt, only=None, budget=None, timeout=None):
     if os.environ.get('ANTHROPIC_API_KEY') and not only:
         try:
-            out = _anthropic(prompt)
+            out = _anthropic(prompt, timeout)
             LAST['anthropic'] = 'ok'
             return out
         except Exception as e:      # 실패하면 AI Gateway 로(이유는 점검 화면에 남긴다)
@@ -281,25 +281,33 @@ def translate(texts, lang, trusted=None):
         uniq = list(dict.fromkeys(texts[i] for i in todo))
         safe = [t for t in uniq if t in trusted]
         loose = [t for t in uniq if t not in trusted and len(t) <= 80][:8]      # 서명 없는 글은 짧은 것 8개까지만
-        batches = [(safe[s:s + 30], True) for s in range(0, len(safe), 30)] + ([(loose, False)] if loose else [])
-        for part, keep in batches:
+        batches = [(safe[s:s + 12], True) for s in range(0, len(safe), 12)] + ([(loose, False)] if loose else [])
+        def run(part):
+            prompt = TR_PROMPT.format(target=LANGS[lang], n=len(part), texts=json.dumps(part, ensure_ascii=False))
+            text = _TEST[0](prompt) if _TEST else _chat(prompt, timeout=25)
+            j = text.find('[')
+            arr = json.JSONDecoder().raw_decode(text[j:])[0] if j >= 0 else None
+            if not isinstance(arr, list) or len(arr) != len(part):
+                raise ValueError('번역 개수 불일치')
+            return arr
+
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=min(6, len(batches)) or 1) as ex:      # 묶음을 동시에(지역 이름 131개도 몇 초 안에)
+            futs = [(part, keep, ex.submit(run, part)) for part, keep in batches]
+        for part, keep, f in futs:
             try:
-                prompt = TR_PROMPT.format(target=LANGS[lang], n=len(part), texts=json.dumps(part, ensure_ascii=False))
-                text = _TEST[0](prompt) if _TEST else _chat(prompt)
-                j = text.find('[')
-                arr = json.JSONDecoder().raw_decode(text[j:])[0] if j >= 0 else None
-                if not isinstance(arr, list) or len(arr) != len(part):
-                    raise ValueError('번역 개수 불일치')
-                for src, dst in zip(part, arr):
-                    dst = str(dst or '').strip()[:300]
-                    if dst and _nums(dst) != _nums(src):
-                        dst = ''                       # 숫자가 바뀐 번역(1m 이상→2m)은 버리고 원문을 둔다
-                    if dst:
-                        if keep:
-                            _cache(f'tr2:{lang}:{src}', dst)
-                        for i in todo:
-                            if texts[i] == src:
-                                out[i] = dst
+                arr = f.result()
             except Exception as e:
                 LAST['error'] = f'translate: {type(e).__name__}: {e}'[:300]
+                continue
+            for src, dst in zip(part, arr):
+                dst = str(dst or '').strip()[:300]
+                if dst and _nums(dst) != _nums(src):
+                    dst = ''                       # 숫자가 바뀐 번역(1m 이상→2m)은 버리고 원문을 둔다
+                if dst:
+                    if keep:
+                        _cache(f'tr2:{lang}:{src}', dst)
+                    for i in todo:
+                        if texts[i] == src:
+                            out[i] = dst
     return out
