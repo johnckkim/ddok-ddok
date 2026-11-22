@@ -13,10 +13,9 @@ BASE = 'https://ai-gateway.vercel.sh/v1'
 TIMEOUT = float(os.environ.get('AI_TIMEOUT', '8'))
 TTL = 30 * 86400
 PREFER = [m.strip() for m in os.environ.get('AI_MODEL', '').split(',') if m.strip()] + [
-    'anthropic/claude-haiku-5.5', 'anthropic/claude-haiku-5', 'anthropic/claude-sonnet-5.5', 'anthropic/claude-sonnet-5',
-    'anthropic/claude-haiku-4.5', 'anthropic/claude-sonnet-4.5', 'google/gemini-3-flash', 'google/gemini-2.5-flash',
-    'google/gemini-3.5-flash', 'google/gemini-2.5-flash-lite', 'openai/gpt-5-mini']
-# 무료 등급(유료 크레딧 없음)에서 확인된 빠른 모델: google/gemini-2.5-flash-lite
+    'anthropic/claude-haiku-5.5', 'anthropic/claude-haiku-4.5', 'anthropic/claude-sonnet-5.5',   # 유료 크레딧이 있을 때
+    'google/gemini-2.5-flash', 'openai/gpt-5-mini']                                             # 무료 등급에서 확인된 모델
+# google/gemini-2.5-flash-lite 는 무료지만 '베드 범퍼'에 '침대'를 고르는 등 판단이 약해 쓰지 않는다.
 
 _HDR = {'token': '', 'at': 0.0}      # 마지막 요청 헤더의 OIDC 토큰
 _MODEL = {'id': None, 'at': 0.0, 'list': None}
@@ -45,7 +44,7 @@ def _req(path, body=None, timeout=TIMEOUT):
         return json.loads(r.read().decode('utf-8'))
 
 
-CHEAP = ('haiku', 'flash', 'mini', 'nano', 'lite', 'small', 'gpt-oss', 'llama', 'qwen', 'deepseek', 'mistral')
+CHEAP = ('haiku', 'flash', 'mini')
 
 
 def candidates():
@@ -60,7 +59,7 @@ def candidates():
         LAST['error'] = f'models: {e}'
     pref = [m for m in PREFER if not ids or m in ids]
     cheap = [i for i in ids if i not in pref and any(k in i.lower() for k in CHEAP)
-             and not any(k in i.lower() for k in ('embed', 'image', 'tts', 'whisper', 'vision-only'))]
+             and not any(k in i.lower() for k in ('embed', 'image', 'tts', 'whisper', 'vision', 'lite', 'nano', 'batch', 'omni', 'fast'))]
     lst = pref + sorted(cheap, key=lambda i: (0 if 'haiku' in i else 1 if 'flash' in i else 2 if 'mini' in i else 3, i))
     _MODEL.update(list=lst, at=time.time())
     return lst
