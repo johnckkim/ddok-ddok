@@ -347,3 +347,13 @@ table.fees tr.same td.item::after { content: "〃"; color: var(--ink-3); }
 .msg table.fees col.c-item, .msg table.fees.has-note col.c-item { width: 32%; }
 .msg table.fees col.c-spec, .msg table.fees.has-note col.c-spec { width: 32%; }
 .msg .cartlist .etc-tag { display: inline-block; font-size: 12px; font-weight: 700; color: var(--accent); border: 1px solid currentColor; border-radius: 6px; padding: 0 5px; margin-right: 2px; vertical-align: 1px; }
+
+@media (max-width: 420px) {
+  .cart-pill > span[data-t] { display: none; }
+  .cart-pill::before { content: ""; width: 16px; height: 16px; background: currentColor;
+    -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3 4h2l2.2 10.2a1.5 1.5 0 0 0 1.5 1.2h8.6a1.5 1.5 0 0 0 1.5-1.1l2.2-6.3H6.2' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3Ccircle cx='9.5' cy='19.5' r='1.6'/%3E%3Ccircle cx='17' cy='19.5' r='1.6'/%3E%3C/svg%3E") center / contain no-repeat;
+            mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3 4h2l2.2 10.2a1.5 1.5 0 0 0 1.5 1.2h8.6a1.5 1.5 0 0 0 1.5-1.1l2.2-6.3H6.2' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3Ccircle cx='9.5' cy='19.5' r='1.6'/%3E%3Ccircle cx='17' cy='19.5' r='1.6'/%3E%3C/svg%3E") center / contain no-repeat; }
+  .top-r .muni-pill { max-width: 30vw; }
+  .brand { min-width: 0; overflow: hidden; }
+  .brand span { overflow: hidden; text-overflow: ellipsis; display: block; }
+}

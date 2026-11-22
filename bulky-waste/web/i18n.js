@@ -160,7 +160,8 @@
   }
 
   /* 답변 속 글 번역(한국어면 그대로). 같은 글은 한 번만 묻는다. */
-  var memo = {};
+  var memo = {}, tags = {};
+  function addTags(tk) { if (tk) Object.keys(tk).forEach(function (k) { tags[k] = tk[k]; }); }
   function tr(texts, to) {
     var lang = to || cur;
     if (lang === 'ko' && !to) return Promise.resolve(texts.slice());
@@ -171,12 +172,15 @@
     var parts = [];
     for (var i = 0; i < need.length; i += 60) parts.push(need.slice(i, i + 60));
     return Promise.all(parts.map(function (p) {
-      return fetch('/api/translate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lang: lang, texts: p }) })
-        .then(function (r) { return r.ok ? r.json() : { texts: p }; })
-        .then(function (j) { (j.texts || p).forEach(function (v, n) { memo[lang + '|' + p[n]] = v || p[n]; }); })
-        .catch(function () { p.forEach(function (x) { memo[lang + '|' + x] = x; }); });
+      var tk = {}; p.forEach(function (x) { if (tags[x]) tk[x] = tags[x]; });
+      return fetch('/api/translate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lang: lang, texts: p, tk: tk }) })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (j) {          // 실패(429 등)는 기억하지 않는다 → 다음에 다시 시도
+          if (j && j.texts) j.texts.forEach(function (v, n) { if (v && v !== p[n]) memo[lang + '|' + p[n]] = v; });
+        })
+        .catch(function () { /* 다음에 다시 */ });
     })).then(done);
   }
 
-  window.I18N = { LANGS: LANGS, flag: flag, t: t, set: set, tr: tr, lang: function () { return cur; } };
+  window.I18N = { LANGS: LANGS, flag: flag, t: t, set: set, tr: tr, addTags: addTags, lang: function () { return cur; } };
 })();

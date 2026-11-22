@@ -25,6 +25,7 @@
     }).then(function (r) {
       return r.json().catch(function () { return {}; }).then(function (j) {
         if (!r.ok) throw new Error(j.message || t('tryLater'));
+        if (j && j.tk) I.addTags(j.tk);
         return j;
       });
     });
@@ -78,7 +79,7 @@
           greetItems();
         });
       }
-      addBot(t('askPlace'));
+      askPlace(false);                       // 지역 바로가기(과천시)도 새 언어로 다시
     }).then(function () { return relabelCart(); });
   });
 
@@ -719,9 +720,9 @@
       var hit = MUNIS.filter(function (m) { return m.code === sp.get('m'); })[0];
       if (sp.get('t')) showTicket(sp.get('t'));
       askPlace(false);                      // 시작 질문은 항상 지역
-      if (hit) setMuni(hit);                // 공유 링크(?m=)는 그 지역으로 바로 답한 것처럼 이어간다
       var qq = sp.get('q');
-      if (qq && hit) sendItems(splitNames(qq), qq);
+      if (hit && qq) state.waiting = qq;    // 공유 링크(?m=&q=): 인사 다음에 그 품목을 이어서 답한다
+      if (hit) setMuni(hit);
     });
   }).catch(function () { addBot(t('tryLater')); });
 })();

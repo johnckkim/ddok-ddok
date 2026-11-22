@@ -8,8 +8,13 @@ LIMITS = {'quote': (40, 60), 'translate': (60, 60), 'confirm': (40, 60), 'login'
 
 
 def client_ip(request):
+    # Vercel 이 넣는 x-real-ip / x-vercel-forwarded-for 를 먼저 쓴다(x-forwarded-for 첫 값은 고객이 바꿔 보낼 수 있다)
+    for h in ('x-real-ip', 'x-vercel-forwarded-for'):
+        v = request.headers.get(h, '').split(',')[0].strip()
+        if v:
+            return v
     fwd = request.headers.get('x-forwarded-for', '')
-    return (fwd.split(',')[0].strip() if fwd else '') or (request.client.host if request.client else '?')
+    return (fwd.split(',')[-1].strip() if fwd else '') or (request.client.host if request.client else '?')
 
 
 def rate_limit(request, bucket):

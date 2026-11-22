@@ -39,3 +39,12 @@ def unsign(token):
         return body
     except Exception:
         return None
+
+
+def text_tag(text):
+    """서버가 고객 응답에 실어 보낸 글에 붙이는 16자 서명(번역 캐시는 이 서명이 맞는 글만 받는다)."""
+    return hmac.new(_secret(), ('tr:' + str(text)).encode(), hashlib.sha256).hexdigest()[:16]
+
+
+def text_tag_ok(text, tag):
+    return bool(tag) and hmac.compare_digest(text_tag(text), str(tag))

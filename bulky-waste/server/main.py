@@ -28,6 +28,46 @@ def ensure_ready():
 
 
 from .ratelimit import rate_limit  # noqa: E402
+from .tokens import text_tag, text_tag_ok  # noqa: E402
+
+
+async def _body(request):
+    """JSON 객체 본문만 받는다(배열·깨진 글이면 400)."""
+    try:
+        b = await request.json()
+    except Exception:
+        raise HTTPException(400, '요청 형식을 확인해 주세요')
+    if not isinstance(b, dict):
+        raise HTTPException(400, '요청 형식을 확인해 주세요')
+    return b
+
+
+_CATS = {'가구류', '가전·전자', '생활용품', '유아용품', '반려동물', '운동·레저', '악기·취미', '사무·기타', '목재', '기타'}
+
+
+def _tag_texts(j):
+    """고객 응답 속 번역할 만한 글마다 서명을 붙인다(tk). 번역 캐시는 이 서명이 맞는 글만 받는다."""
+    if not isinstance(j, dict):
+        return j
+    out = set()
+    add = lambda s: out.add(s) if isinstance(s, str) and s.strip() and len(s) <= 300 else None
+    for r in j.get('rows') or []:
+        for k in ('품목', '규격', '안내', '수수료'):
+            add(r.get(k))
+    for x in (j.get('pending') or []) + (j.get('closed') or []):
+        add(x)
+    cards = list(j.get('needs_confirm') or []) + ([j['card']] if isinstance(j.get('card'), dict) else [])
+    for c in cards:
+        add(c.get('item_label')); add(c.get('question'))
+        for s in c.get('size_options') or []:
+            add(s)
+        for o in c.get('options') or []:
+            add(o.get('label')); add(o.get('desc'))
+        if isinstance(c.get('product'), dict):
+            add(c['product'].get('title'))
+    add(j.get('message')); add(j.get('municipality'))
+    j['tk'] = {s: text_tag(s) for s in out}
+    return j
 
 
 SEC_HEADERS = {
@@ -78,13 +118,13 @@ def _muni_ok(m):
 @app.post('/api/quote')
 async def quote(request: Request):
     rate_limit(request, 'quote')
-    b = await request.json()
+    b = await _body(request)
     muni = str(b.get('municipality') or 'gwacheon')
     items = b.get('items') or []
     if not isinstance(items, list) or not items:
         raise HTTPException(400, '품목 이름을 입력해 주세요')
     await run_in_threadpool(_muni_ok, muni)
-    return await run_in_threadpool(S.quote, muni, items)
+    return _tag_texts(await run_in_threadpool(S.quote, muni, items))
 
 
 _EXAMPLES = ['소파', '냉장고', '식기세척기', '캣타워', '전동킥보드', '매트리스', '책상', '세탁기', '장롱', '의자', '자전거', '에어컨',
@@ -118,20 +158,24 @@ def examples(request: Request, m: str = ''):
 async def translate(request: Request):
     """화면 글 번역(우리동네플러스 지원 언어). {lang, texts[]} → {texts[]}. 실패한 칸은 원문 그대로."""
     rate_limit(request, 'translate')
-    b = await request.json()
+    b = await _body(request)
     lang = str(b.get('lang') or '')
     texts = b.get('texts') or []
+    tags = b.get('tk') if isinstance(b.get('tk'), dict) else {}
     if lang not in ai.LANGS or not isinstance(texts, list):
         raise HTTPException(400, 'lang, texts 를 확인해 주세요')
-    return {'texts': await run_in_threadpool(ai.translate, texts[:60], lang)}
+    texts = [str(t)[:300] for t in texts[:60] if isinstance(t, (str, int, float))]
+    names = {m['name'] for m in S.municipalities()}
+    trusted = {t for t in texts if lang != 'ko' and (t in names or t in _CATS or text_tag_ok(t, tags.get(t)))}
+    return {'texts': await run_in_threadpool(ai.translate, texts, lang, trusted)}
 
 
 @app.post('/api/confirm/{card_id}')
 async def confirm(card_id: str, request: Request):
     rate_limit(request, 'confirm')
-    b = await request.json()
-    return await run_in_threadpool(S.confirm, card_id, b.get('answer'), b.get('choice'), b.get('size'), b.get('text'),
-                                   b.get('photo'), b.get('dims') if isinstance(b.get('dims'), dict) else None)
+    b = await _body(request)
+    return _tag_texts(await run_in_threadpool(S.confirm, card_id, b.get('answer'), b.get('choice'), b.get('size'), b.get('text'),
+                                              b.get('photo'), b.get('dims') if isinstance(b.get('dims'), dict) else None))
 
 
 @app.get('/api/ticket/{tid}')
@@ -140,7 +184,7 @@ def ticket(tid: str, request: Request):
     t = S.ticket(tid)
     if not t:
         raise HTTPException(404, '접수번호를 찾을 수 없습니다')
-    return t
+    return _tag_texts(t)
 
 
 @app.post('/api/ticket/{tid}/contact')
@@ -157,8 +201,10 @@ async def ticket_contact(tid: str, request: Request):
 async def quote_export(request: Request):
     """화면에 받은 고객용 칸(품목·규격·수수료·배출 안내, 장바구니면 수량·금액)만 CSV/엑셀로 담는다(다른 칸은 버림)."""
     rate_limit(request, 'quote')
-    b = await request.json()
+    b = await _body(request)
     rows = b.get('rows') or []
+    if not isinstance(rows, list):
+        raise HTTPException(400, '요청 형식을 확인해 주세요')
     fmt = b.get('format', 'csv')
     cart = any('수량' in r for r in rows[:300] if isinstance(r, dict))
 
@@ -234,7 +280,7 @@ def quote_get(request: Request, q: str = '', m: str = 'gwacheon'):
     if not names:
         raise HTTPException(400, '품목 이름을 입력해 주세요')
     _muni_ok(m)
-    return S.quote(m, [{'name': n} for n in names])
+    return _tag_texts(S.quote(m, [{'name': n} for n in names]))
 
 
 @app.get('/api/cron/import')

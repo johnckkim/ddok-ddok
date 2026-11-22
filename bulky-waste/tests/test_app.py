@@ -583,25 +583,36 @@ def test_unclear_specs_go_to_review():
 
 
 def test_translate_endpoint_and_cache():
-    """다국어: 한글 칸만 번역해 캐시하고, 번역 실패·개수 불일치면 원문을 돌려준다."""
+    """다국어: 서버가 서명한 글(응답의 tk)만 캐시하고, 서명 없는 글은 번역만 하고 캐시하지 않는다.
+    숫자가 바뀐 번역은 버리고, 개수 불일치·잘못된 언어면 원문/400."""
     from server import ai
+    from server.tokens import text_tag
     calls = []
 
     def fake(prompt):
         calls.append(prompt)
-        import json as _j, re as _r
+        import json as _j
         arr = _j.loads(prompt[prompt.rindex('['):])
         return _j.dumps(['EN:' + x for x in arr], ensure_ascii=False)
     ai._TEST[:] = [fake]
     try:
-        r = client.post('/api/translate', json={'lang': 'en', 'texts': ['소파', '1인용', '3,000', '']})
+        tk = {'소파': text_tag('소파'), '1인용': text_tag('1인용')}
+        r = client.post('/api/translate', json={'lang': 'en', 'texts': ['소파', '1인용', '3,000', ''], 'tk': tk})
         assert r.status_code == 200 and r.json()['texts'] == ['EN:소파', 'EN:1인용', '3,000', '']
         n = len(calls)
-        assert client.post('/api/translate', json={'lang': 'en', 'texts': ['소파']}).json()['texts'] == ['EN:소파']
-        assert len(calls) == n                                   # 두 번째는 캐시
+        assert client.post('/api/translate', json={'lang': 'en', 'texts': ['소파'], 'tk': tk}).json()['texts'] == ['EN:소파']
+        assert len(calls) == n                                   # 서명 있는 글은 캐시
+        client.post('/api/translate', json={'lang': 'en', 'texts': ['냉장고 아무말']})
+        client.post('/api/translate', json={'lang': 'en', 'texts': ['냉장고 아무말']})
+        assert len(calls) == n + 2                               # 서명 없는 글은 캐시하지 않는다
+        ai._TEST[:] = [lambda p: '["2m 이상"]']
+        assert client.post('/api/translate', json={'lang': 'ru', 'texts': ['1m 이상'], 'tk': {'1m 이상': text_tag('1m 이상')}}).json()['texts'] == ['1m 이상']
         ai._TEST[:] = [lambda p: '["하나뿐"]']
         assert client.post('/api/translate', json={'lang': 'vi', 'texts': ['냉장고', '책상']}).json()['texts'] == ['냉장고', '책상']
         assert client.post('/api/translate', json={'lang': 'xx', 'texts': ['소파']}).status_code == 400
+        assert client.post('/api/translate', json=[1]).status_code == 400
+        q = client.post('/api/quote', json={'municipality': 'gwacheon', 'items': [{'name': '소파'}]}).json()
+        assert q['tk'].get('1인용') == text_tag('1인용')       # 답 속 글에는 서명이 붙어 온다
     finally:
         ai._TEST[:] = []
 
@@ -690,3 +701,28 @@ def test_etc_fee_rounds_to_app_amount_units():
     S._mark_cart(res)
     o = res['rows'][0]
     assert o['cart'] == '기타' and o['fee'] == 3000 and o['note'] == ''
+
+
+def test_ref_scaling_to_other_region():
+    """과천 확정표 크기 구분 × (그 지역 k ÷ 과천 k), 그 지역이 두 번 이상 쓰는 금액 단계, 큰 규격은 한 단계 위."""
+    from server import service as S
+
+    class R:
+        pass
+    c = R()
+    c.muni, c.k, c.grid = 'test-region', 1.0, [2000, 3000, 4000]
+    c.local = [{'fee': f} for f in (2000, 2000, 3000, 3000, 4000, 4000)]
+    g = S.ctx('gwacheon')
+    base = [(o['spec'], o['fee']) for o in S.resolve(g, '캣타워')['rows']]
+    rows = S._ref_scaled(c, '캣타워', '캣타워')
+    assert [o['spec'] for o in rows] == [s for s, _ in base]
+    fees = [o['fee'] for o in rows]
+    assert all(f in (2000, 3000, 4000) for f in fees) and fees == sorted(fees) and len(set(fees)) == len(fees)
+
+
+def test_filtered_rows_never_come_back_as_estimate():
+    """간접 답에서 맞는 규격이 하나도 안 남으면(퀸침대→접이식·2층만) 계산값으로 되살리지 않는다."""
+    from server import service as S
+    res = {'kind': 'pending', 'rows': [{'item': '퀸침대', 'spec': '2층 침대', 'fee': 19000}],
+           'result': {'등급': 'L2 유사품목', '경로': '상위어 접이식 침대 (맞는 규격 없음)'}}
+    assert S._engine_estimate(S.ctx('gwacheon'), '퀸침대', res) is None

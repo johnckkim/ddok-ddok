@@ -165,7 +165,8 @@ def ctx(muni):
         for k in [k for k in _CACHE if k[1] != ver]:
             _CACHE.pop(k, None)
         while len(_CACHE) >= 12:
-            _CACHE.pop(next(iter(_CACHE)))
+            old = next((k for k in _CACHE if k[0] != 'gwacheon'), None) or next(iter(_CACHE))
+            _CACHE.pop(old)
         _CACHE[key] = c
         return c
 
@@ -475,9 +476,10 @@ def _fit_rows(q, rows):
         sf = {C.ROW_WORD[w] for w in sw}
         if sf and not (sf & (qf | tf)):
             continue                                     # 규격에 다른 무리 물건 이름
-        src = re.sub(r'\s', '', str(o.get('src') or ''))
+        src = re.sub(r'\s', '', re.sub(r'\([^()]*포함[^()]*\)', '', str(o.get('src') or '')))   # '(…포함)'은 구성 설명
         if len(re.split(r'[,ㆍ·/+]', src)) >= 3:
-            src = ''                                     # '벽시계, 가방, …, 휠체어' 한 줄 묶음 이름은 종류 판단에 쓰지 않는다
+            # '벽시계, 가방, …, 휠체어' 한 줄 묶음 이름은 종류 판단에 쓰지 않되, 괄호 속 종류는 본다('의자·쇼파류(돌·옥·황토 쇼파)')
+            src = ''.join(re.findall(r'\(([^()]*)\)', src))
         here = sp.replace(' ', '') + '|' + src
         if any(t in here and t not in qn and (t not in kid or grown) for t in C.TYPE_WORDS):
             continue                                     # 고객이 말하지 않은 다른 종류(규격 글이나 조례 품목 이름에)
@@ -491,13 +493,34 @@ def resolve(c, q, label=None, expr=None):
     res = _resolve(c, q, label, expr)
     if res.get('rows'):
         res['rows'] = _age_fit(expr or q, res['rows'])
+        lab = label or _label_for(c, q)
         path = str(res.get('result', {}).get('경로') or '')
         if res['kind'] == 'rows' and any(k in path for k in _INDIRECT):
             kept = _fit_rows(expr or q, res['rows'])
+            qn = re.sub(r'\s', '', expr or q) + '|' + E.norm(expr or q)
+            want = [t for t in ('2층', '이층', '벙커', '돌', '흙', '옥', '황토', '안마', '업소', '영업', '쌍둥이', '접이식', '대리석')
+                    if t in qn]                           # 다른 종류를 뜻하는 앞말만(드럼세탁기는 세탁기 크기로 충분)
+            if kept and want and not any(t in re.sub(r'\s', '', str(o.get('spec')) + str(o.get('src') or '')) for o in kept for t in want):
+                kept = []                                 # '2층침대'인데 2층 줄이 없으면 일반침대로 답하지 않는다
             if not kept:
-                return {'kind': 'pending', 'rows': res['rows'], 'result': dict(res['result'], 경로=path + ' (맞는 규격 없음)'), 'review': True}
+                ref = _ref_scaled(c, expr or q, lab)
+                if ref and not _unclear(ref):
+                    res = {'kind': 'rows', 'rows': ref, 'result': dict(res['result'], 경로=f'과천 기준 지역 환산(k {c.k:.2f})'), 'review': True}
+                    _mark_cart(res, lab)
+                    return res
+            if not kept:
+                return {'kind': 'pending', 'rows': [], 'result': dict(res['result'], 경로=path + ' (맞는 규격 없음)'), 'review': True}
             res['rows'] = kept
-        _mark_cart(res)
+        _mark_cart(res, lab)
+        seen, uniq = set(), []
+        for o in res['rows']:                             # 제품명으로 바꾼 뒤 같아진 줄은 하나만
+            key = (o.get('item'), o.get('spec'), o.get('fee'), o.get('method'))
+            if key not in seen:
+                seen.add(key)
+                uniq.append(o)
+        res['rows'] = uniq
+        if res['kind'] == 'rows' and _unclear(uniq):     # 같은 규격 글에 금액이 둘 → 고를 수 없음
+            return {'kind': 'pending', 'rows': [], 'result': dict(res['result'], 경로=path + ' (규격 원문 유실)'), 'review': True}
     return res
 
 
@@ -510,7 +533,7 @@ def _etc_fee(f):
     return max(1000, int(f / 1000 + 0.5) * 1000) if f else f
 
 
-def _mark_cart(res):
+def _mark_cart(res, label=None):
     # 조례에 있는 품목이면 그 조례 품목으로, 없으면(계산해서 안내) 장바구니에 '기타'로 담는다.
     # 조례에 없는 품목은 다른 항목 이름으로 안내하지 않고 고객이 쓴 제품명 그대로 둔다(조례 보완 자료).
     r = res.get('result') or {}
@@ -524,6 +547,8 @@ def _mark_cart(res):
         elif subst:
             o['cart'] = '기타'
             o['fee'] = _etc_fee(o.get('fee'))
+            if label:
+                o['item'] = label              # 조례에 없는 품목은 고객이 쓴 제품명 그대로(조례 원래 이름 숨김)
             o['note'] = _NOTE_SUBST.sub(' · ', o.get('note') or '').strip(' ·')
         else:
             o['cart'] = clean(o.get('src') or o.get('item'))
@@ -858,13 +883,15 @@ def _ai_estimate(c, name):
 
 def _engine_estimate(c, name, res):
     # AI도 없으면 엔진 계산값(전국 통계×지역 수준, 없으면 지역 최빈 금액)을 제품명 그대로·기타로 안내
-    if str((res.get('result') or {}).get('등급') or '').startswith('L4'):
-        return None                      # 근거 없는 최빈 금액은 계산이 아니다 → 확인 후 안내
-    rows = [dict(o) for o in (res.get('rows') or []) if o.get('fee')]
+    r = res.get('result') or {}
+    if str(r.get('등급') or '').startswith('L4') or re.search(r'맞는 규격 없음|규격 원문 유실', str(r.get('경로') or '')):
+        return None                      # 근거 없는 최빈 금액·걸러져 남은 줄 없음·규격 유실 → 확인 후 안내
+    rows = _fit_rows(name, [dict(o) for o in (res.get('rows') or []) if o.get('fee')])
+    label = _label_for(c, name)
+    for o in rows:
+        o.update(item=label, cart='기타', fee=_etc_fee(o['fee']), note=_NOTE_SUBST.sub(' · ', o.get('note') or '').strip(' ·'))
     if not rows or _unclear(rows):
         return None
-    for o in rows:
-        o.update(item=_label_for(c, name), cart='기타', fee=_etc_fee(o['fee']), note=_NOTE_SUBST.sub(' · ', o.get('note') or '').strip(' ·'))
     return rows
 
 
@@ -1044,8 +1071,8 @@ def _finish(c, expr, d, size=None, label=None, as_item=False):
     if res['kind'] == 'rows':
         rows = res['rows']
         rows = _age_fit(expr, rows)
-        if as_item:      # AI가 고른 조례 항목: 고객이 쓴 이름 + '○○ 항목으로 배출'
-            rows = [dict(o, note=f"‘{d['label']}’ 항목으로 배출") for o in rows]   # '현행 조례 품목'보다 어느 항목인지가 먼저
+        if as_item:      # (예전 카드) AI가 고른 항목: 제품명 그대로, 대체 문구 없이, 장바구니는 기타
+            rows = [dict(o, item=label, note='', cart='기타', fee=_etc_fee(o.get('fee'))) for o in rows]
         if size:
             pick = [o for o in rows if o['spec'] == size]
             rows = pick or rows
