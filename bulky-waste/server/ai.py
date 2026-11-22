@@ -16,6 +16,7 @@ PREFER = [m.strip() for m in os.environ.get('AI_MODEL', '').split(',') if m.stri
     'anthropic/claude-haiku-5.5', 'anthropic/claude-haiku-5', 'anthropic/claude-sonnet-5.5', 'anthropic/claude-sonnet-5',
     'anthropic/claude-haiku-4.5', 'anthropic/claude-sonnet-4.5', 'google/gemini-3-flash', 'google/gemini-2.5-flash',
     'google/gemini-3.5-flash', 'google/gemini-2.5-flash-lite', 'openai/gpt-5-mini']
+# 무료 등급(유료 크레딧 없음)에서 확인된 빠른 모델: google/gemini-2.5-flash-lite
 
 _HDR = {'token': '', 'at': 0.0}      # 마지막 요청 헤더의 OIDC 토큰
 _MODEL = {'id': None, 'at': 0.0, 'list': None}
@@ -85,7 +86,7 @@ def _chat(prompt, only=None, budget=None):
         t0 = time.time()
         try:
             out = _req('/chat/completions', {'model': m, 'max_tokens': 1500, 'temperature': 0,
-                                             'messages': [{'role': 'user', 'content': prompt}]}, timeout=min(TIMEOUT, left))
+                                             'messages': [{'role': 'user', 'content': prompt}]}, timeout=left if only else min(TIMEOUT, left))
             text = out['choices'][0]['message'].get('content') or ''
             tries.append((m, round(time.time() - t0, 1), 'ok' if text.strip() else 'empty'))
             if not text.strip():
@@ -141,6 +142,8 @@ PROMPT = """너는 한국 지자체 대형폐기물 배출 안내 담당자다.
 이 물건을 내놓을 때 스티커를 붙이는 품목을 목록에서 골라라.
 - 반드시 목록에 있는 품목명을 글자 그대로 쓴다. 목록에 없는 이름은 쓰지 않는다.
 - 가장 알맞은 것부터 최대 3개. 물건의 재질·크기·쓰임이 같은 품목을 고른다.
+- 재질이 다른 품목은 고르지 않는다(예: 천·솜·스펀지 물건에 목재·플라스틱 품목 X).
+- '기타 ○○' 같은 묶음 품목은 재질이 맞고 다른 알맞은 품목이 없을 때만 쓴다.
 - 대형폐기물이 아니거나(종량제 봉투·재활용) 알맞은 품목이 없으면 빈 배열.
 JSON 한 줄로만 답한다: {{"items": ["품목명", ...], "what": "이 물건이 무엇인지 10자 안팎"}}"""
 
