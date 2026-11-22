@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>수수료 운영 관리</title>
+<link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/static/style.css">
+<link rel="stylesheet" href="/static/admin.css">
+</head>
+<body class="adm">
+<header class="top">
+  <div class="wrap wide top-in">
+    <a class="brand" href="/admin"><img src="/static/icon.svg" alt="" width="28" height="28"><span>수수료 운영 관리</span></a>
+    <div class="who" id="who" hidden>
+      <select id="muni" aria-label="지자체"></select>
+      <span id="uname"></span>
+      <button class="btn small" id="logout" type="button">로그아웃</button>
+    </div>
+  </div>
+</header>
+
+<main class="wrap wide">
+  <section id="login" class="panel login" hidden>
+    <h1>운영자 로그인</h1>
+    <form id="loginf">
+      <label>아이디<input name="id" autocomplete="username" required></label>
+      <label>비밀번호<input name="pw" type="password" autocomplete="current-password" required></label>
+      <button class="btn primary block" type="submit">로그인</button>
+      <p class="err" id="loginerr" hidden></p>
+    </form>
+  </section>
+
+  <section id="app" hidden>
+    <div class="kpis" id="kpis"></div>
+    <nav class="tabs" role="tablist" id="tabs">
+      <button role="tab" data-tab="review" aria-selected="true">검토 대기열 <span class="badge" id="b-review"></span></button>
+      <button role="tab" data-tab="confirmed">확정표</button>
+      <button role="tab" data-tab="ordinance">조례</button>
+      <button role="tab" data-tab="synonyms">표현 사전 <span class="badge" id="b-syn"></span></button>
+      <button role="tab" data-tab="national">전국 통계</button>
+      <button role="tab" data-tab="history">이력</button>
+      <button role="tab" data-tab="settings">설정·시험</button>
+    </nav>
+    <div id="view" class="view"></div>
+  </section>
+</main>
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+<script src="/static/admin.js" defer></script>
+</body>
+</html>

@@ -1,0 +1,186 @@
+"""FastAPI 앱: 고객 화면(공개) + 운영자 화면(로그인).
+고객 API 응답에는 근거 필드가 없다 — service.quote/confirm/ticket 이 만든 dict만 그대로 내보낸다."""
+import csv, io, os, re, threading
+
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.concurrency import run_in_threadpool
+from fastapi.responses import FileResponse, JSONResponse, Response
+
+from . import admin, service as S, store
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+WEB = os.path.join(ROOT, 'web')
+
+app = FastAPI(title='대형폐기물 수수료 안내', docs_url=None, redoc_url=None, openapi_url=None)
+app.include_router(admin.router)
+
+_init_lock = threading.Lock()
+_ready = [False]
+
+
+def ensure_ready():
+    if _ready[0]:
+        return
+    with _init_lock:
+        if not _ready[0]:
+            store.init()
+            _ready[0] = True
+
+
+from .ratelimit import rate_limit  # noqa: E402
+
+
+SEC_HEADERS = {
+    'X-Content-Type-Options': 'nosniff',
+    'Referrer-Policy': 'strict-origin-when-cross-origin',
+    'X-Frame-Options': 'DENY',
+    'Permissions-Policy': 'camera=(self), microphone=(), geolocation=()',
+    'Content-Security-Policy': "default-src 'self'; img-src 'self' data: blob: https:; style-src 'self' 'unsafe-inline'; "
+                               "script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
+}
+
+
+@app.middleware('http')
+async def lifecycle(request: Request, call_next):
+    await run_in_threadpool(ensure_ready)
+    path = request.url.path
+    if path.startswith('/api/'):
+        force = path.startswith('/api/admin/') and request.method != 'GET'
+        await run_in_threadpool(store.SYNC.pull, force)
+    before = store.writes()
+    resp = await call_next(request)
+    if store.writes() != before:
+        await run_in_threadpool(store.SYNC.push)
+    for k, v in SEC_HEADERS.items():
+        resp.headers.setdefault(k, v)
+    if path.startswith('/api/'):
+        resp.headers.setdefault('Cache-Control', 'no-store')
+    return resp
+
+
+@app.exception_handler(HTTPException)
+async def http_err(request: Request, exc: HTTPException):
+    return JSONResponse({'status': 'error', 'message': exc.detail}, status_code=exc.status_code, headers=SEC_HEADERS)
+
+
+# ---------------------------------------------------------------- 고객 API
+@app.get('/api/municipalities')
+def municipalities():
+    return {'items': S.municipalities()}
+
+
+def _muni_ok(m):
+    if not any(x['code'] == m for x in S.municipalities()):
+        raise HTTPException(404, '지자체를 찾을 수 없습니다')
+
+
+@app.post('/api/quote')
+async def quote(request: Request):
+    rate_limit(request, 'quote')
+    b = await request.json()
+    muni = str(b.get('municipality') or 'gwacheon')
+    items = b.get('items') or []
+    if not isinstance(items, list) or not items:
+        raise HTTPException(400, '품목 이름을 입력해 주세요')
+    await run_in_threadpool(_muni_ok, muni)
+    return await run_in_threadpool(S.quote, muni, items)
+
+
+@app.post('/api/confirm/{card_id}')
+async def confirm(card_id: str, request: Request):
+    rate_limit(request, 'confirm')
+    b = await request.json()
+    return await run_in_threadpool(S.confirm, card_id, b.get('answer'), b.get('choice'), b.get('size'), b.get('text'),
+                                   b.get('photo'), b.get('dims') if isinstance(b.get('dims'), dict) else None)
+
+
+@app.get('/api/ticket/{tid}')
+def ticket(tid: str, request: Request):
+    rate_limit(request, 'ticket')
+    t = S.ticket(tid)
+    if not t:
+        raise HTTPException(404, '접수번호를 찾을 수 없습니다')
+    return t
+
+
+@app.post('/api/quote/export')
+async def quote_export(request: Request):
+    """화면에 받은 고객용 4칸(품목·규격·수수료·배출 안내)만 CSV/엑셀로 담는다(다른 칸은 버림)."""
+    rate_limit(request, 'quote')
+    b = await request.json()
+    rows = b.get('rows') or []
+    fmt = b.get('format', 'csv')
+    clean = []
+    for r in rows[:300]:
+        clean.append([str(r.get(k) or '')[:80] for k in ('품목', '규격', '수수료', '안내')])
+    if fmt == 'xlsx':
+        from openpyxl import Workbook
+        from openpyxl.styles import Alignment, Font
+        wb = Workbook()
+        ws = wb.active
+        ws.title = '수수료'
+        ws.append(['품목', '규격', '수수료', '배출 안내'])
+        for c in ws[1]:
+            c.font = Font(bold=True)
+        for r in clean:
+            fee = r[2]
+            num = int(fee.replace(',', '').replace('원', '')) if re.fullmatch(r'[\d,]+원', fee) else fee
+            ws.append([r[0], r[1], num, r[3]])
+            cell = ws.cell(row=ws.max_row, column=3)
+            if isinstance(num, int):
+                cell.number_format = '#,##0"원"'
+            cell.alignment = Alignment(horizontal='right')
+        for col, w in zip('ABCD', (28, 30, 14, 30)):
+            ws.column_dimensions[col].width = w
+        bio = io.BytesIO()
+        wb.save(bio)
+        return admin.xlsx_response(bio.getvalue(), '대형폐기물_수수료.xlsx')
+    bio = io.StringIO()
+    w = csv.writer(bio)
+    w.writerow(['품목', '규격', '수수료', '배출 안내'])
+    w.writerows(clean)
+    return Response('﻿' + bio.getvalue(), media_type='text/csv; charset=utf-8',
+                    headers={'Content-Disposition': "attachment; filename*=UTF-8''%EB%8C%80%ED%98%95%ED%8F%90%EA%B8%B0%EB%AC%BC_%EC%88%98%EC%88%98%EB%A3%8C.csv"})
+
+
+@app.get('/api/health')
+def health():
+    return {'ok': True, 'sync': store.SYNC.enabled}
+
+
+@app.get('/api/cron/national')
+def cron_national(request: Request):
+    secret = os.environ.get('CRON_SECRET')
+    if not secret or request.headers.get('authorization') != f'Bearer {secret}':
+        raise HTTPException(401, 'unauthorized')
+    from . import natdata
+    try:
+        return dict(natdata.refresh('정기 갱신'), ok=True)
+    except Exception as e:
+        store.log('정기 갱신', '전국 통계 갱신 실패', str(e)[:300])
+        raise HTTPException(502, str(e)[:300])
+
+
+# ---------------------------------------------------------------- 화면
+def _page(name, cache='no-cache'):
+    return FileResponse(os.path.join(WEB, name), headers={'Cache-Control': cache})
+
+
+@app.get('/')
+def home():
+    return _page('index.html')
+
+
+@app.get('/admin')
+def admin_page():
+    return _page('admin.html')
+
+
+_STATIC = {'app.js', 'admin.js', 'style.css', 'admin.css', 'icon.svg', 'manifest.webmanifest'}
+
+
+@app.get('/static/{name}')
+def static(name: str):
+    if name not in _STATIC:
+        raise HTTPException(404)
+    return _page(name, 'public, max-age=300')
