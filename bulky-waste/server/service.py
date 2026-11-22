@@ -57,7 +57,7 @@ E.local_head = _local_head
 E.local_analog = _local_analog
 # 엔진 유사품목 사전 보강(엔진 파일은 건드리지 않고 여기서 더한다)
 # 검수에서 엉뚱하다고 본 유사품목 짝은 뺀다(EQUIV 순서 규칙으로 옮겼거나 확인 후 안내가 낫다)
-for _p in [('개집', '고무통'), ('캣휠', '고무통'), ('게시판', '입간판'), ('드럼', '피아노'), ('화환', '액자'), ('목발', '스키'),
+for _p in [('커튼', '이불'), ('벤치', '운동기구'), ('개집', '고무통'), ('캣휠', '고무통'), ('게시판', '입간판'), ('드럼', '피아노'), ('화환', '액자'), ('목발', '스키'),
            ('골프채', '스키'), ('발마사지기', '운동기구'), ('안전문', '상'), ('나무판자', '상'), ('야전침대', '상'), ('솜', '단열재'),
            ('맥주', '전기밥솥'), ('에어매트', '고무통'), ('현악기', '기타'), ('쓰레기통', '플라스틱류'), ('복합기', '프린터'),
            ('화이트보드', '간판'), ('칠판', '간판'), ('캣타워', '신발장'), ('사물함', '신발장'), ('쿠션', '인형류'),
@@ -261,7 +261,7 @@ def _rows_for(c, q, r, label):
             if (item, disp_spec, x['fee']) in seen:
                 continue
             seen.add((item, disp_spec, x['fee']))
-            out.append({'item': item, 'spec': disp_spec, 'fee': x['fee'], 'note': note, 'fixed': bool(x['disp_spec'])})
+            out.append({'item': item, 'spec': disp_spec, 'fee': x['fee'], 'note': note, 'fixed': bool(x['disp_spec']), 'src': x['name']})
     else:
         disp = {}
         for x in E.local_exact(q, c.local):
@@ -327,7 +327,7 @@ def _group_rows(src, label):
         if (it, sp, x['fee']) in seen:
             continue
         seen.add((it, sp, x['fee']))
-        out.append({'item': it, 'spec': sp, 'fee': x['fee'], 'note': '', 'fixed': bool(x['disp_spec'])})
+        out.append({'item': it, 'spec': sp, 'fee': x['fee'], 'note': '', 'fixed': bool(x['disp_spec']), 'src': x['name']})
     for item in dict.fromkeys(o['item'] for o in out):
         grp = [o for o in out if o['item'] == item]
         if len(grp) >= 3 and not any(g['fixed'] for g in grp):
@@ -419,7 +419,8 @@ def _equiv_rows(c, q, label):
             if (spec, x['fee']) in seen:
                 continue
             seen.add((spec, x['fee']))
-            out.append({'item': label, 'spec': spec, 'fee': x['fee'], 'note': note})
+            out.append({'item': label, 'spec': spec, 'fee': x['fee'], 'note': note, 'src': x['name']})
+        out = [o for o in out if not (C.ROW_BAG.search(str(o['spec'])) or C.ROW_RATE.search(str(o['spec'])))] or out   # 추가·단가·봉투 줄만 빼고
         if _unclear(out) or (len(out) > 1 and _not_one_object(out, name)) or all(_RATE.search(str(o['spec'])) for o in out):
             continue          # 규격 원문 유실·무게 단가·다른 물건 묶음이면 다음 대체 항목으로
         return out, name
@@ -436,11 +437,63 @@ def _age_fit(q, rows):
     return keep or rows
 
 
+def _row_words(text):
+    s = re.sub(r'\s', '', str(text or '').lower())
+    found = []
+    for w in C.ROW_WORDS:
+        if w in s:
+            found.append(w)
+            s = s.replace(w, '|')
+    return found
+
+
+_INDIRECT = ('상위어', '유사품목', '같은 배출', '다른 이름', '끝말', '전동형', '규격 일치')
+
+
+def _fit_rows(q, rows):
+    # 간접 답에서 '물어본 물건의 크기'가 아닌 줄을 뺀다: 다른 물건(캠핑의자→안마의자), 말하지 않은 종류(퀸침대→2층·돌·유아용),
+    # 봉투·마대 부피, 무게·면적 단가. 남는 줄이 없으면 빈 목록(→ 확인 후 안내).
+    qn = re.sub(r'\s', '', q or '') + '|' + E.norm(q or '')          # '흙침대'는 정규화하면 '돌침대'
+    qf = {C.ROW_WORD[w] for w in _row_words(qn)}
+    grown = re.search(r'퀸|킹|더블|싱글|\d\s*인|성인|어른|일반', q or '')      # 어른 크기를 말했으면 유아·아기 줄은 다른 종류
+    kid = ('유아', '아기', '어린이', '아동')
+    out = []
+    for o in rows:
+        sp = str(o.get('spec') or '')
+        if o.get('method'):
+            out.append(o)
+            continue
+        if C.ROW_BAG.search(sp) or C.ROW_WEIGHT.search(sp):
+            continue                                     # 봉투·마대·무게 단가(면적·길이 단가는 그 물건의 크기라 남긴다)
+        m = re.search(r'‘(.+?)’', str(o.get('note') or ''))
+        tf = {C.ROW_WORD[w] for w in _row_words(m.group(1))} if m else set()
+        tf |= {C.ROW_WORD[w] for w in _row_words(re.sub(r'\(.*?\)', '', str(o.get('src') or '')))}
+        sw = _row_words(sp)
+        sf = {C.ROW_WORD[w] for w in sw}
+        if sf and not (sf & (qf | tf)):
+            continue                                     # 규격에 다른 무리 물건 이름
+        src = re.sub(r'\s', '', str(o.get('src') or ''))
+        if len(re.split(r'[,ㆍ·/+]', src)) >= 3:
+            src = ''                                     # '벽시계, 가방, …, 휠체어' 한 줄 묶음 이름은 종류 판단에 쓰지 않는다
+        here = sp.replace(' ', '') + '|' + src
+        if any(t in here and t not in qn and (t not in kid or grown) for t in C.TYPE_WORDS):
+            continue                                     # 고객이 말하지 않은 다른 종류(규격 글이나 조례 품목 이름에)
+        out.append(o)
+    base = [o for o in out if not C.ROW_ADDON.search(str(o.get('spec') or ''))]
+    return base if base and len(base) < len(out) else out      # '추가 시' 줄은 기본 줄이 있으면 뺀다
+
+
 def resolve(c, q, label=None, expr=None):
     """품목명 1개 → {'kind': 'rows'|'pending'|'ask', rows, result(내부), names(ask일 때 후보)}"""
     res = _resolve(c, q, label, expr)
     if res.get('rows'):
         res['rows'] = _age_fit(expr or q, res['rows'])
+        path = str(res.get('result', {}).get('경로') or '')
+        if res['kind'] == 'rows' and any(k in path for k in _INDIRECT):
+            kept = _fit_rows(expr or q, res['rows'])
+            if not kept:
+                return {'kind': 'pending', 'rows': res['rows'], 'result': dict(res['result'], 경로=path + ' (맞는 규격 없음)'), 'review': True}
+            res['rows'] = kept
     return res
 
 

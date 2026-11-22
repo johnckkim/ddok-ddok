@@ -479,6 +479,7 @@ def test_bed_bumper_equivalent_item():
                row('전기매트', '1인용', 3000)]
     for q in ('베드 범퍼', '베드범퍼', '침대 범퍼', '범퍼침대', '침대 가드'):
         rows, used = S._equiv_rows(c, q, q)
+        rows = [{k: v for k, v in o.items() if k != 'src'} for o in rows]
         assert used == '유아용 놀이매트' and rows == [{'item': q, 'spec': '1㎡당', 'fee': 1000, 'note': '‘유아용 놀이매트’ 항목으로 배출'}]
     c.local = c.local[:2]
     assert S._equiv_rows(c, '베드 범퍼', '베드 범퍼')[1] == '이불'
@@ -655,3 +656,18 @@ def test_ai_pick_rejects_material_groups():
     assert not S._not_one_object([{'item': 'x', 'spec': '높이 1m 미만', 'fee': 2000}, {'item': 'x', 'spec': '높이 1m 이상', 'fee': 3000}], '신발장')
     from server import catalog as C
     assert C.CATCH_ALL.search('나무류') and C.CATCH_ALL.search('기타100') and not C.CATCH_ALL.search('기타(악기)')
+
+
+def test_indirect_rows_only_sizes_of_asked_item():
+    """간접 답: 다른 물건(안마의자)·말하지 않은 종류(2층·돌·유아용)·봉투·무게 단가 줄은 뺀다. 면적 단가는 남긴다."""
+    from server import service as S
+    rows = [{'item': '캠핑의자', 'spec': s, 'fee': f, 'note': ''} for s, f in
+            [('일반의자(1인용)', 2000), ('회전의자(1인용)', 4000), ('안마의자', 15000), ('20kg당', 1000)]]
+    assert [o['spec'] for o in S._fit_rows('캠핑의자', rows)] == ['일반의자(1인용)', '회전의자(1인용)']
+    beds = [{'item': '퀸침대', 'spec': s, 'fee': f, 'note': ''} for s, f in
+            [('유아용 침대', 3000), ('2인용(틀)', 7000), ('어린이 2층 침대', 20000), ('2인용 돌침대 세트', 30000)]]
+    assert [o['spec'] for o in S._fit_rows('퀸침대', beds)] == ['2인용(틀)']
+    kick = [{'item': '킥보드', 'spec': s, 'fee': f, 'note': ''} for s, f in [('어린이용', 2000), ('성인용', 3000)]]
+    assert len(S._fit_rows('킥보드', kick)) == 2                        # 어른 크기를 말하지 않았으면 어린이용도 크기
+    mat = [{'item': '놀이매트', 'spec': '3.3㎡(1평)당', 'fee': 2000, 'note': ''}]
+    assert S._fit_rows('놀이매트', mat) == mat                         # 면적 단가는 그 물건의 크기
