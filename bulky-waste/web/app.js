@@ -433,7 +433,7 @@
     try { if (window.ReactNativeWebView) window.ReactNativeWebView.postMessage(JSON.stringify(item)); } catch (e) { /* 무시 */ }
     try { if (window.parent && window.parent !== window) window.parent.postMessage(item, '*'); } catch (e) { /* 무시 */ }
   }
-  var CART_SVG = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M3 4h2l2.2 10.2a1.5 1.5 0 0 0 1.5 1.2h8.6a1.5 1.5 0 0 0 1.5-1.1L21 8H6.2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>' +
+  var CART_SVG = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M3 4h2l2.2 10.2a1.5 1.5 0 0 0 1.5 1.2h8.6a1.5 1.5 0 0 0 1.5-1.1l2.2-6.3H6.2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>' +
     '<circle cx="9.5" cy="19.5" r="1.5" fill="currentColor"/><circle cx="17" cy="19.5" r="1.5" fill="currentColor"/><path class="plus" d="M13 9v4M11 11h4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
   function rowCart(r, i) {
     return '<button type="button" class="row-cart" data-addrow="' + i + '" aria-label="' + esc((r._item || r['품목']) + ' ' + (r._spec || r['규격']) + ' — ' + t('addCart')) + '" title="' + esc(t('addCart')) + '">' + CART_SVG + '</button>';
