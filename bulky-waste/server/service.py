@@ -296,12 +296,20 @@ def _with_siblings(c, q, rows, label):
     return out
 
 
+_ADDON = re.compile(r'추가|초과\s*시|마다|\d\s*(kg|㎏|cm|㎝|m|㎡|ℓ|L|톤)\s*당')
+
+
+def _order(x):
+    """금액순이되, '10kg 초과 시 10kg당 추가' 같은 추가·단위 요금 줄은 뒤로."""
+    return (1 if _ADDON.search(str(x.get('spec') or '')) else 0, x['fee'] or 0)
+
+
 def _group_rows(src, label):
     """조례 행 묶음 → 고객 행(금액순, 품목명이 여럿이면 줄마다 조례 품목명, 3단 이상은 범위 표기)."""
     clean = lambda n: re.sub(r'\s+', ' ', re.sub(r'\s*\(\d+\)\s*', ' ', n or '')).strip()
     names = list(dict.fromkeys(clean(x['disp_item'] or x['name']) for x in src))
     out, seen = [], set()
-    for x in sorted(src, key=lambda x: x['fee']):
+    for x in sorted(src, key=_order):
         sp = x['disp_spec'] or C.tidy_spec(x['spec'])
         it = label if len(names) == 1 else clean(x['disp_item'] or x['name'])
         if (it, sp, x['fee']) in seen:
@@ -384,14 +392,17 @@ def _equiv_rows(c, q, label):
         return None
     clean = lambda n: re.sub(r'\s*\(\d+\)\s*', ' ', n or '').strip()
     for pat, bad, shown in rules:
-        hit = [x for x in c.local if re.search(pat, x['name']) and not re.search(bad, x['name'] + ' ' + (x['spec'] or ''))]
+        hit = [x for x in c.local if re.search(pat, x['name']) and not (bad and re.search(bad, x['name'] + ' ' + (x['spec'] or '')))]
         if not hit:
             continue
+        if '전동' in E.norm(q):      # 전동형을 물으면 전동 줄(용산 '유아용 자동차(전동차)', 노원 '전동형')이 있으면 그것만
+            pw = [x for x in hit if '전동' in (x['name'] + ' ' + (x['spec'] or ''))]
+            hit = pw or hit
         name = clean(hit[0]['disp_item'] or hit[0]['name'])
         hit = [x for x in hit if clean(x['disp_item'] or x['name']) == name]
         note = f"‘{name}’ 항목으로 배출" if shown else ''
         out, seen = [], set()
-        for x in sorted(hit, key=lambda x: x['fee']):
+        for x in sorted(hit, key=_order):
             spec = x['disp_spec'] or C.tidy_spec(x['spec'])
             if (spec, x['fee']) in seen:
                 continue
@@ -401,8 +412,25 @@ def _equiv_rows(c, q, label):
     return None
 
 
+def _age_fit(q, rows):
+    """'아기 전동자동차'에 '성인용' 줄을, '성인용 자전거'에 '어린이용' 줄을 보이지 않는다(남는 줄이 없으면 그대로)."""
+    kid, adult = C.CHILD_WORDS.search(q or ''), C.ADULT_WORDS.search(q or '')
+    if not rows or bool(kid) == bool(adult):
+        return rows
+    bad = C.ADULT_WORDS if kid else C.CHILD_WORDS
+    keep = [o for o in rows if not bad.search(str(o.get('spec') or ''))]
+    return keep or rows
+
+
 def resolve(c, q, label=None, expr=None):
     """품목명 1개 → {'kind': 'rows'|'pending'|'ask', rows, result(내부), names(ask일 때 후보)}"""
+    res = _resolve(c, q, label, expr)
+    if res.get('rows'):
+        res['rows'] = _age_fit(expr or q, res['rows'])
+    return res
+
+
+def _resolve(c, q, label=None, expr=None):
     q = clean_name(q)
     label = label or _label_for(c, q)
     mh = _method_hit(c, q)
@@ -789,6 +817,7 @@ def _finish(c, expr, d, size=None, label=None, as_item=False):
     _log_expression(c, expr, d['label'], d['query'])
     if res['kind'] == 'rows':
         rows = res['rows']
+        rows = _age_fit(expr, rows)
         if as_item:      # AI가 고른 조례 항목: 고객이 쓴 이름 + '○○ 항목으로 배출'
             rows = [dict(o, note=f"‘{d['label']}’ 항목으로 배출") for o in rows]   # '현행 조례 품목'보다 어느 항목인지가 먼저
         if size:

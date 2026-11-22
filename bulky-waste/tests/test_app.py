@@ -622,3 +622,13 @@ def test_powered_item_uses_manual_top_tier():
     c = S.ctx('gwacheon')
     res = S.resolve(c, '전동킥보드')
     assert res['kind'] == 'rows' and len(res['rows']) == 1 and '배터리' in (res['rows'][0].get('note') or ''), res
+
+
+def test_child_items_hide_adult_rows():
+    """'아기 전동자동차'에 '성인용' 줄이 나오면 안 된다(반대도 같다)."""
+    from server import service as S
+    rows = [{'item': 'x', 'spec': '어린이용', 'fee': 2000}, {'item': 'x', 'spec': '성인용', 'fee': 3000}]
+    assert [o['spec'] for o in S._age_fit('아기 전동자동차', rows)] == ['어린이용']
+    assert [o['spec'] for o in S._age_fit('성인 자전거', rows)] == ['성인용']
+    assert S._age_fit('자전거', rows) == rows
+    assert S._age_fit('아기 의자', [{'item': 'x', 'spec': '성인용', 'fee': 3000}])[0]['spec'] == '성인용'   # 남는 줄이 없으면 그대로
