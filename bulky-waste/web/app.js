@@ -105,7 +105,7 @@
     $('#muniPill').hidden = true;
     var last = MUNIS.filter(function (m) { return m.code === store('bw.muni'); })[0];
     addBot((again ? '지자체를 바꿀게요. <b>거주하고 계신 지자체명</b>을 입력해 주세요.'
-      : '안녕하세요! 대형폐기물 수수료를 알려드릴게요.<br>먼저 <b>거주하고 계신 지자체명</b>을 입력해 주세요.') +
+      : '<b>거주하고 계신 지자체명</b>을 입력해 주세요.') +
       (last ? '<div class="chips"><button type="button" data-place="' + esc(last.code) + '">' + esc(last.name) + '</button></div>' : ''));
     setMode('place');
   }
