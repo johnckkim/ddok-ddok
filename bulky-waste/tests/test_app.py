@@ -632,3 +632,14 @@ def test_child_items_hide_adult_rows():
     assert [o['spec'] for o in S._age_fit('성인 자전거', rows)] == ['성인용']
     assert S._age_fit('자전거', rows) == rows
     assert S._age_fit('아기 의자', [{'item': 'x', 'spec': '성인용', 'fee': 3000}])[0]['spec'] == '성인용'   # 남는 줄이 없으면 그대로
+
+
+def test_examples_only_answerable_items():
+    """지역을 고른 뒤 보이는 예시 단추는 그 지역에서 금액이 바로 나오는 품목만."""
+    from server import service as S
+    j = client.get('/api/examples?m=gwacheon').json()
+    assert 1 <= len(j['items']) <= 6
+    c = S.ctx('gwacheon')
+    for q in j['items']:
+        r = S.resolve(c, q)
+        assert r['kind'] == 'rows' and any(o.get('fee') for o in r['rows']), (q, r)

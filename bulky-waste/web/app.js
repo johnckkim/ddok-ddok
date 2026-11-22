@@ -3,8 +3,7 @@
   var $ = function (s, el) { return (el || document).querySelector(s); };
   var I = window.I18N, t = I.t;
   var CAT_ORDER = ['가구류', '가전·전자', '생활용품', '유아용품', '반려동물', '운동·레저', '악기·취미', '사무·기타', '목재', '기타'];
-  var QUICK = ['소파', '냉장고', '식기세척기', '캣타워', '전동킥보드', '매트리스'];
-  var state = { muni: '', muniName: '', muniDisp: '', mode: 'place', busy: false, cart: [], cartEl: null };
+  var state = { muni: '', muniName: '', muniDisp: '', mode: 'place', busy: false, cart: [], cartEl: null, waiting: null };
   var RN = 0;
   var MUNIS = [];
 
@@ -158,12 +157,17 @@
     setMode('place');
   }
   function greetItems() {
-    return I.tr(QUICK).then(function (q) {
-      addBot(t('muniSet', { m: esc(state.muniDisp) }) +
-        '<div class="chips">' + QUICK.map(function (n, i) { return '<button type="button" data-send="' + esc(n) + '" data-shown="' + esc(q[i]) + '">' + esc(q[i]) + '</button>'; }).join('') + '</div>');
-    });
+    // 예시 단추는 그 지역에서 금액이 바로 나오는 품목만(서버가 확인)
+    return api('/api/examples?m=' + encodeURIComponent(state.muni)).then(function (j) { return j.items || []; }, function () { return []; })
+      .then(function (ex) {
+        return I.tr(ex).then(function (q) {
+          addBot(t('muniSet', { m: esc(state.muniDisp) }) + (ex.length ?
+            '<div class="chips">' + ex.map(function (n, i) { return '<button type="button" data-send="' + esc(n) + '" data-shown="' + esc(q[i]) + '">' + esc(q[i]) + '</button>'; }).join('') + '</div>' : ''));
+        });
+      });
   }
   function setMuni(m, quiet) {
+    if (!m) return;
     if (state.cart.length && state.muni && m.code !== state.muni) {   // 수수료는 지역마다 달라서 지역을 바꾸면 비운다
       state.cart = []; renderCart(); toast(t('cartCleared'));
     }
@@ -171,7 +175,8 @@
     $('#muniName').textContent = state.muniDisp; $('#muniPill').hidden = false;
     if (!quiet) addUser(state.muniDisp);
     setMode('items');
-    greetItems();
+    var w = state.waiting; state.waiting = null;
+    greetItems().then(function () { if (w) sendItems(splitNames(w), w); });   // 지역 고르기 전에 물은 품목은 바로 이어서
   }
   function renderSuggest() {
     var ul = $('#suggest');
@@ -199,11 +204,17 @@
       var list = matches(text);
       if (list.length) { setMuni(list[0]); return; }
       addUser(text); $('#input').value = ''; renderSuggest();
-      var miss = function () { addBot(t('noArea', { n: MUNIS.length })); };
-      if (hasHangul(text)) { miss(); return; }
+      /* 지역 이름처럼 보이면 '안내하지 않는 지역', 아니면(품목을 먼저 물으면) 지역부터 묻고 품목은 기억했다가 이어서 답한다 */
+      var miss = function (k) {
+        var kk = String(k).replace(/\s+/g, '');
+        var place = /(특별시|광역시|특별자치|시|군|구|도|읍|면|동)$/.test(kk) && !/(기구|가구|완구|문구|도구|공구|용구|냉동)$/.test(kk);
+        if (place) addBot(t('noArea', { n: MUNIS.length }));
+        else { state.waiting = text; addBot(t('needPlace', { x: esc(text) })); }
+      };
+      if (hasHangul(text)) { miss(text); return; }
       I.tr([text], 'ko').then(function (a) {            // 'Gwacheon' → '과천시'
         var l2 = a[0] !== text ? matches(a[0]) : [];
-        if (l2.length) setMuni(l2[0], true); else miss();
+        if (l2.length) setMuni(l2[0], true); else miss(a[0]);
       });
       return;
     }

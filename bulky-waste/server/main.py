@@ -87,6 +87,33 @@ async def quote(request: Request):
     return await run_in_threadpool(S.quote, muni, items)
 
 
+_EXAMPLES = ['소파', '냉장고', '식기세척기', '캣타워', '전동킥보드', '매트리스', '책상', '세탁기', '장롱', '의자', '자전거', '에어컨',
+             '식탁', '서랍장', 'TV', '책장', '유모차', '침대']
+_EX_CACHE = {}
+
+
+@app.get('/api/examples')
+def examples(request: Request, m: str = ''):
+    """그 지역에서 실제로 금액이 바로 나오는 품목만 예시 단추로(답 못 하는 예시 금지)."""
+    rate_limit(request, 'quote')
+    _muni_ok(m)
+    key = (m, store.get_setting('data_version', '0'))
+    if key not in _EX_CACHE:
+        c = S.ctx(m)
+        ok = []
+        for q in _EXAMPLES:
+            try:
+                r = S.resolve(c, q)
+            except Exception:
+                continue
+            if r['kind'] == 'rows' and r['rows'] and not r.get('review') and any(o.get('fee') for o in r['rows']):
+                ok.append(q)
+            if len(ok) >= 6:
+                break
+        _EX_CACHE[key] = ok
+    return {'items': _EX_CACHE[key]}
+
+
 @app.post('/api/translate')
 async def translate(request: Request):
     """화면 글 번역(우리동네플러스 지원 언어). {lang, texts[]} → {texts[]}. 실패한 칸은 원문 그대로."""
