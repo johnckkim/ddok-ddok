@@ -452,6 +452,31 @@ def _age_fit(q, rows, strict=False):
     return keep if strict else (keep or rows)     # strict: 맞는 줄이 없으면 빈 목록(간접 답이면 다른 방법으로)
 
 
+_SIZE1 = re.compile(r'싱글|1\s*인')
+_SIZE2 = re.compile(r'더블|퀸|킹|[2-9]\s*인')
+
+
+def _size_fit(q, rows):
+    """'싱글침대'에 2인용·더블 줄을, '퀸침대'에 1인용·싱글 줄을 보이지 않는다(맞는 줄이 있을 때만)."""
+    s1, s2 = bool(_SIZE1.search(q or '')), bool(_SIZE2.search(q or ''))
+    if s1 == s2 or not rows:
+        return rows
+    other = _SIZE2 if s1 else _SIZE1
+    mine = _SIZE1 if s1 else _SIZE2
+    keep = [o for o in rows if o.get('method') or not other.search(re.sub(r'슈퍼싱글', '싱글', str(o.get('spec') or '')))
+            or mine.search(str(o.get('spec') or ''))]
+    return keep if keep and any(mine.search(str(o.get('spec') or '')) for o in keep) else rows
+
+
+def _kind_fit(q, rows):
+    """직접 답에서도 고객이 말하지 않은 다른 종류 줄(의자 → '안마의자', 냉장고 → '김치냉장고')은 뺀다(남는 줄이 있을 때만)."""
+    qn = re.sub(r'\s', '', q or '') + '|' + E.norm(q or '')
+    kid = ('유아', '아기', '어린이', '아동')
+    words = ('안마', '김치')                  # 직접 답에서는 아예 다른 물건만(업소용·대리석·실외기·세트 줄은 그 품목의 규격이라 남긴다)
+    keep = [o for o in rows if o.get('method') or not any(t in re.sub(r'\s', '', str(o.get('spec') or '')) and t not in qn for t in words)]
+    return keep if keep and len(keep) < len(rows) and any(not o.get('method') for o in keep) else rows
+
+
 _ADULT_SIZE = re.compile(r'[2-9]인|더블|퀸|킹|슈퍼싱글|양수|대형|세트|업소|영업')
 
 
@@ -514,12 +539,15 @@ def _region_has(c, word):
     return False
 
 
+_GENERIC = {'기타', '일반', '소형', '중형', '대형', '세트', '받침', '모든', '규격', '부속', '용품', '가구', '가전'}
+
+
 def _spec_hit(c, q, label):
     """조례 품목명엔 없고 규격 칸에만 있는 물건('침대' 줄의 '1인용 매트리스'). 앞말이 품목이면 그 품목 안에서만 찾는다."""
     qn = E.norm(q)
-    if len(qn) < 3:
+    if len(qn) < 2 or qn in _GENERIC:                  # '기타'(악기)가 '기타 재질' 규격에 걸리지 않게
         return None
-    sp = lambda r: re.sub(r'[\s()\[\],·]', '', str(r['spec'] or '')).lower()     # 괄호 안('1인용 (매트리스)')도 본다
+    sp = lambda r: E.norm(re.sub(r'[()\[\]]', ' ', str(r['spec'] or '')))     # 괄호 안('1인용 (매트리스)')도, 쇼파→소파 같은 표기도
     hit, best = [], 0
     for r in c.local:                                   # '침대 매트리스' = 품목 '침대' + 규격 '매트리스'
         for t in r['tok']:
@@ -529,6 +557,11 @@ def _spec_hit(c, q, label):
                     hit, best = [], len(t)
                 hit.append(r)
                 break
+    if not hit and len(qn) >= 3:                        # 이름 변형: '매트리스' → 조례 '침대매트리스', '에어컨' → '에어컨디셔너'
+        hit = [r for r in c.local if any(t != qn and t.endswith(qn) and not C.CATCH_ALL.search(r['name'])
+                                         for t in r['tok'])]
+        if len({r['name'] for r in hit}) != 1:
+            hit = []
     if not hit:                                         # '매트리스' 혼자: 규격 칸에 그 말이 있는 한 품목
         hit = [r for r in c.local if qn in sp(r) and qn not in ''.join(r['tok'])]
     plain = [r for r in hit if '세트' not in str(r['spec'] or '')]
@@ -549,7 +582,7 @@ def resolve(c, q, label=None, expr=None):
         sh = _spec_hit(c, expr or q, label or _label_for(c, q))
         if sh:
             done = _post(c, q, label, expr, sh)
-            if done['kind'] == 'rows':                  # 규격 칸 답이 끝까지 살아남을 때만 쓴다
+            if done['kind'] == 'rows' and '과천 기준' not in str(done['result'].get('경로') or ''):   # 규격 칸 답이 끝까지 살아남을 때만
                 return done
     return _post(c, q, label, expr, res)
 
@@ -563,6 +596,7 @@ def _post(c, q, label, expr, res):
 def _post1(c, q, label, expr, res):
     if res.get('rows'):
         n0 = len(res['rows'])
+        res['rows'] = _kind_fit(expr or q, _size_fit(expr or q, res['rows']))
         res['raw'] = res['rows']
         res['rows'] = _age_fit(expr or q, res['rows'])
         lab = label or _label_for(c, q)
@@ -621,6 +655,9 @@ def _mark_cart(res, label=None):
     path, grade = str(r.get('경로') or ''), str(r.get('등급') or '')
     # 확정표(L1)는 운영자가 정한 금액이지 조례 품목이 아니다 → 앱 카탈로그(=조례)에 없으므로 기타
     subst = any(k in path for k in _SUBST) or grade.startswith(('L1', 'L2*', 'L3', 'L4'))
+    rows0 = [o for o in res.get('rows') or [] if not o.get('method')]
+    if subst and '규격 일치' in grade + path and rows0 and all(o.get('src') for o in rows0) and not any(k in path for k in ('과천 기준', '전국', 'AI')):
+        subst = False                      # 조례 규격 칸에 그 물건이 있는 줄(안마의자 → 의자 '안마의자' 줄): 조례 품목으로 담는다
     clean = lambda n: re.sub(r'\s+', ' ', re.sub(r'\s*\(\d+\)\s*', ' ', n or '')).strip()
     for o in res.get('rows') or []:
         if o.get('method'):

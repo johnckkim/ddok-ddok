@@ -789,3 +789,15 @@ def test_kid_indirect_keeps_baby_row_not_bunk():
     kept = S._age_fit('유아침대', S._fit_rows('유아침대', rows), strict=True)
     assert sorted(o['fee'] for o in kept) == [3000, 5000]
     assert S._age_fit('아기욕조', [{'spec': '성인용', 'fee': 5000}], strict=True) == []
+
+
+def test_size_and_kind_fit():
+    """싱글침대엔 2인용 줄을, 의자엔 안마의자 줄을 보이지 않는다. 업소용 같은 그 품목의 규격은 남긴다."""
+    from server import service as S
+    bed = [{'spec': '1인용(틀)', 'fee': 5000}, {'spec': '2인용(틀)', 'fee': 7000}, {'spec': '1인용 세트', 'fee': 10000}]
+    assert [o['fee'] for o in S._size_fit('싱글침대', bed)] == [5000, 10000]
+    assert len(S._size_fit('침대', bed)) == 3
+    chair = [{'spec': '일반의자', 'fee': 2000}, {'spec': '안마의자', 'fee': 15000}]
+    assert [o['fee'] for o in S._kind_fit('의자', chair)] == [2000]
+    fr = [{'spec': '300ℓ 미만', 'fee': 4000}, {'spec': '업소용', 'fee': 20000}]
+    assert len(S._kind_fit('냉장고', fr)) == 2
