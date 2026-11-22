@@ -347,8 +347,10 @@ def test_new_municipality_upload():
     j = cust('post', '/api/quote', json={'municipality': 'testcity', 'items': [{'name': '식기세척기'}, {'name': '소파'}, {'name': '목검'}]}).json()
     assert j['municipality'] == '시험시'
     # 그 지자체 금액 체계: 식기세척기 → 그 조례의 세탁기 금액, 소파 → 그 조례 현행 금액
-    assert [(r['품목'], r['수수료']) for r in j['rows']] == [('식기세척기', '5,000원'), ('소파', '4,000원'), ('소파', '6,000원')]
-    assert j['pending'] == ['목검']           # 그 지자체엔 확정표가 없음 → 근거 없는 금액은 검토 대기
+    got = [(r['품목'], r['수수료']) for r in j['rows']]
+    assert got[:3] == [('식기세척기', '5,000원'), ('소파', '4,000원'), ('소파', '6,000원')]
+    # 조례에 없는 '목검'은 과천 확정표 기준으로 이 지역 금액 단계에 맞춰 계산해 안내(2026-11-23 결정)
+    assert [n for n, _ in got[3:]] == ['목검'] and j['pending'] == []
 
 
 def test_synonym_dictionary_applies():
@@ -671,3 +673,11 @@ def test_indirect_rows_only_sizes_of_asked_item():
     assert len(S._fit_rows('킥보드', kick)) == 2                        # 어른 크기를 말하지 않았으면 어린이용도 크기
     mat = [{'item': '놀이매트', 'spec': '3.3㎡(1평)당', 'fee': 2000, 'note': ''}]
     assert S._fit_rows('놀이매트', mat) == mat                         # 면적 단가는 그 물건의 크기
+
+
+def test_missing_item_uses_reference_sizes_scaled():
+    """조례에 없는 품목은 과천 확정표의 크기 구분으로, 금액은 그 지역 수준으로 환산(캣타워면 캣타워로)."""
+    from server import service as S
+    g = S.ctx('gwacheon')
+    rows = S._ref_scaled(g, '캣타워', '캣타워')
+    assert rows is None                                   # 과천 자신은 환산하지 않는다

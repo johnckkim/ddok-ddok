@@ -162,7 +162,10 @@ def ctx(muni):
         for r in c.local:
             if r['disp_spec']:
                 c.spec_disp.setdefault((r['name'], r['spec']), r['disp_spec'])
-        _CACHE.clear()
+        for k in [k for k in _CACHE if k[1] != ver]:
+            _CACHE.pop(k, None)
+        while len(_CACHE) >= 12:
+            _CACHE.pop(next(iter(_CACHE)))
         _CACHE[key] = c
         return c
 
@@ -497,6 +500,32 @@ def resolve(c, q, label=None, expr=None):
     return res
 
 
+REF_MUNI = 'gwacheon'      # 확정표가 갖춰진 기준 지자체(조례에 없는 품목의 크기 구분·금액 비율 기준)
+
+
+def _ref_scaled(c, q, label):
+    """조례에 없는 품목: 과천 확정표·조례에 그 품목이 있으면 과천의 크기 구분을 그대로 쓰고,
+    금액은 이 지역 금액 수준(k)으로 환산해 이 지역 금액 단계에 맞춘다. (캣타워면 캣타워로)"""
+    if c.muni == REF_MUNI:
+        return None
+    try:
+        g = ctx(REF_MUNI)
+    except KeyError:
+        return None
+    rg = _resolve(g, q, label)
+    grade = str(rg.get('result', {}).get('등급') or '')
+    if rg['kind'] != 'rows' or not grade.startswith(('L0', 'L1')) or not rg['rows'] or any(not o.get('fee') for o in rg['rows']):
+        return None
+    ratio = (c.k or 1.0) / (g.k or 1.0)
+    fees = [r['fee'] for r in c.local]
+    grid = sorted({f for f in fees if fees.count(f) >= 2}) or c.grid      # 그 지역에서 두 번 이상 쓰는 금액 단계
+    out = []
+    for o in rg['rows']:
+        fee = E.snap(o['fee'] * ratio, grid)
+        out.append({'item': label, 'spec': o['spec'], 'fee': fee, 'note': ''})
+    return out
+
+
 def _resolve(c, q, label=None, expr=None):
     q = clean_name(q)
     label = label or _label_for(c, q)
@@ -529,6 +558,10 @@ def _resolve(c, q, label=None, expr=None):
                     rows_a = _with_siblings(c, alias, rows_a, label)
                 if rows_a and not review_a:
                     return {'kind': 'rows', 'rows': rows_a, 'result': dict(ra, 품목=q, 경로=f"다른 이름 '{alias}'로 찾음"), 'review': False}
+        if not str(r.get('경로') or '').startswith('상위어'):
+            ref = _ref_scaled(c, q, label)
+            if ref and not _unclear(ref):
+                return {'kind': 'rows', 'rows': ref, 'result': dict(r, 품목=q, 경로=f'과천 기준 지역 환산(k {c.k:.2f})'), 'review': True}
         eq = _equiv_rows(c, q, label)
         if eq:
             return {'kind': 'rows', 'rows': eq[0], 'result': dict(r, 품목=q, 경로=f"같은 배출 항목 '{eq[1]}'")}
@@ -574,6 +607,8 @@ def _resolve(c, q, label=None, expr=None):
         review = True
         if c.policy == 'show':
             return {'kind': 'pending', 'rows': rows, 'result': dict(r, 경로=str(r.get('경로')) + ' (규격 원문 유실)'), 'review': True}
+    if review and r['등급'].startswith('L3') and rows and all(o.get('fee') for o in rows) and not _unclear(rows):
+        return {'kind': 'rows', 'rows': rows, 'result': r, 'review': True}      # 조례에 없는 품목: 전국 통계 × 지역 수준으로 계산해 안내
     if review and c.policy != 'show':
         return {'kind': 'pending', 'rows': rows, 'result': r, 'review': True}
     return {'kind': 'rows', 'rows': rows, 'result': r, 'review': review}
