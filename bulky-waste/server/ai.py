@@ -33,7 +33,7 @@ def _token():
 
 
 def available():
-    return bool(_TEST) or bool(_token()) and os.environ.get('AI_DISABLED') != '1'
+    return bool(_TEST) or bool(_token() or os.environ.get('ANTHROPIC_API_KEY')) and os.environ.get('AI_DISABLED') != '1'
 
 
 def _req(path, body=None, timeout=TIMEOUT):
@@ -69,7 +69,28 @@ def model():
     return _MODEL.get('id') or (candidates() or PREFER)[0]
 
 
+def _anthropic(prompt):
+    """ANTHROPIC_API_KEY 가 있으면 Claude API를 바로 쓴다(빠르고 판단이 좋다)."""
+    m = os.environ.get('ANTHROPIC_MODEL', 'claude-haiku-5-5')
+    req = urllib.request.Request('https://api.anthropic.com/v1/messages', method='POST', data=json.dumps({
+        'model': m, 'max_tokens': 300, 'temperature': 0, 'messages': [{'role': 'user', 'content': prompt}]}).encode(),
+        headers={'x-api-key': os.environ['ANTHROPIC_API_KEY'], 'anthropic-version': '2023-06-01', 'content-type': 'application/json'})
+    with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
+        out = json.loads(r.read().decode('utf-8'))
+    LAST['model'] = m
+    return ''.join(b.get('text', '') for b in out.get('content', []) if b.get('type') == 'text')
+
+
 def _chat(prompt, only=None, budget=None):
+    if os.environ.get('ANTHROPIC_API_KEY') and not only:
+        try:
+            return _anthropic(prompt)
+        except Exception as e:      # 실패하면 AI Gateway 로
+            LAST['error'] = f'anthropic: {type(e).__name__}: {e}'[:300]
+    return _gateway(prompt, only, budget)
+
+
+def _gateway(prompt, only=None, budget=None):
     """되는 모델을 찾을 때까지 차례로 시도(무료 등급 제한·빈 답·시간 초과는 다음으로). 되는 모델은 기억한다.
     전체 대기 시간은 budget초를 넘기지 않는다."""
     order = only or (([_MODEL['id']] if _MODEL.get('id') else []) + [m for m in candidates() if m != _MODEL.get('id')])
