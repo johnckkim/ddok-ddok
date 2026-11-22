@@ -23,6 +23,8 @@ SIDO = {  # 표기 변형 → (짧은 이름, 정식 이름, 로마자)
 
 def sido_of(s):
     s = str(s or '').strip()
+    if s.startswith('전남광주'):
+        return SIDO['전남']
     if s.startswith('광주') and ('광역' in s or s == '광주'):
         return SIDO['광주광역']
     for k in sorted(SIDO, key=len, reverse=True):
@@ -170,8 +172,9 @@ def run(rows, targets, user, force=False, dry=False):
             report['skipped'].append({'name': f'{sd} {sgg}', 'reason': f'유료 품목 {len(table)}행뿐'})
             continue
         sido = sido_of(sd)
-        name = f'{sido[1]} {sgg}'
-        exist = store.q('SELECT code, name FROM municipality WHERE name=?', (name,), one=True)
+        inst_clean = re.sub(r'\s+', ' ', inst).strip()
+        name = inst_clean if inst_clean.endswith(sgg) and len(inst_clean) > len(sgg) else f'{sido[1]} {sgg}'
+        exist = store.q('SELECT code, name FROM municipality WHERE name=? OR name=?', (name, f'{sido[1]} {sgg}'), one=True)
         code = exist['code'] if exist else muni_code(sido[2], sgg)
         src = store.get_setting(f'source:{code}', 'manual' if exist else '')
         if exist and src == 'manual' and not force:
@@ -181,6 +184,8 @@ def run(rows, targets, user, force=False, dry=False):
         report['imported'].append(item)
         if dry:
             continue
+        if exist and exist['name'] != name:
+            store.x('UPDATE municipality SET name=? WHERE code=?', (name, code))
         if not exist:
             n = 2
             base = code
