@@ -231,6 +231,33 @@ def _label_for(c, q):
     return q
 
 
+def _equiv_rows(c, q, label):
+    """조례에 따로 없는 품목을 그 지자체 조례에서 같은 스티커로 내놓는 항목으로 안내한다(C.EQUIV).
+    돌려주는 값: (고객 행, 쓴 조례 품명) 또는 None."""
+    k = E.norm(q)
+    k = C.EQUIV_ALIAS.get(k, k)
+    rules = C.EQUIV.get(k)
+    if not rules:
+        return None
+    clean = lambda n: re.sub(r'\s*\(\d+\)\s*', ' ', n or '').strip()
+    for pat, bad, shown in rules:
+        hit = [x for x in c.local if re.search(pat, x['name']) and not re.search(bad, x['name'] + ' ' + (x['spec'] or ''))]
+        if not hit:
+            continue
+        name = clean(hit[0]['disp_item'] or hit[0]['name'])
+        hit = [x for x in hit if clean(x['disp_item'] or x['name']) == name]
+        note = f"‘{name}’ 항목으로 배출" if shown else ''
+        out, seen = [], set()
+        for x in sorted(hit, key=lambda x: x['fee']):
+            spec = x['disp_spec'] or C.tidy_spec(x['spec'])
+            if (spec, x['fee']) in seen:
+                continue
+            seen.add((spec, x['fee']))
+            out.append({'item': label, 'spec': spec, 'fee': x['fee'], 'note': note})
+        return out, name
+    return None
+
+
 def resolve(c, q, label=None, expr=None):
     """품목명 1개 → {'kind': 'rows'|'pending'|'ask', rows, result(내부), names(ask일 때 후보)}"""
     q = clean_name(q)
@@ -247,6 +274,10 @@ def resolve(c, q, label=None, expr=None):
     multi = _multi_confirmed(c, q, r)
     if multi:
         return {'kind': 'ask', 'rows': [], 'result': r, 'names': multi}
+    if not r['등급'].startswith(('L0', 'L1')):
+        eq = _equiv_rows(c, q, label)
+        if eq:
+            return {'kind': 'rows', 'rows': eq[0], 'result': dict(r, 품목=q, 경로=f"같은 배출 항목 '{eq[1]}'")}
     if r['등급'].startswith('L4') and ' ' in q and not expr:
         # 근거가 전혀 없는 여러 낱말 표현('베드 범퍼')은 끝말('범퍼')이 조례·확정표에 있으면 그 금액을 쓴다
         head = q.split()[-1]

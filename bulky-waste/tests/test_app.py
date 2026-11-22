@@ -478,3 +478,24 @@ def test_bed_bumper_expressions():
         j = quote(q)
         assert j['rows'] and j['pending'] == [] and j['rows'][0]['수수료'] == '3,000원', (q, j)
     assert rows_of(quote('소파베드'))[0][2] == '10,000원'          # 베드→침대 바꿔도 기존 확정표 그대로
+
+
+def test_bed_bumper_equivalent_item():
+    """조례에 '침대범퍼'가 없는 지자체: 같은 스티커로 내놓는 조례 항목(놀이매트 → 쿠션 → 방석 → 이불)으로 안내한다."""
+    from server import service as S
+    from engine import engine as E
+
+    class C:
+        pass
+    c = C()
+    row = lambda n, s, f: {'name': n, 'spec': s, 'fee': f, 'tok': E.tokens(n), 'disp_item': '', 'disp_spec': ''}
+    c.local = [row('자동차범퍼', '모든규격', 9000), row('이불', '솜이불', 2000), row('유아용 놀이매트', '1㎡당', 1000),
+               row('전기매트', '1인용', 3000)]
+    for q in ('베드 범퍼', '베드범퍼', '침대 범퍼', '범퍼침대', '침대 가드'):
+        rows, used = S._equiv_rows(c, q, q)
+        assert used == '유아용 놀이매트' and rows == [{'item': q, 'spec': '1㎡당', 'fee': 1000, 'note': '‘유아용 놀이매트’ 항목으로 배출'}]
+    c.local = c.local[:2]
+    assert S._equiv_rows(c, '베드 범퍼', '베드 범퍼')[1] == '이불'
+    c.local = [row('자동차범퍼', '모든규격', 9000)]
+    assert S._equiv_rows(c, '베드 범퍼', '베드 범퍼') is None
+    assert S._equiv_rows(c, '소파', '소파') is None
