@@ -14,7 +14,8 @@ TIMEOUT = float(os.environ.get('AI_TIMEOUT', '8'))
 TTL = 30 * 86400
 PREFER = [m.strip() for m in os.environ.get('AI_MODEL', '').split(',') if m.strip()] + [
     'anthropic/claude-haiku-5.5', 'anthropic/claude-haiku-5', 'anthropic/claude-sonnet-5.5', 'anthropic/claude-sonnet-5',
-    'anthropic/claude-haiku-4.5', 'anthropic/claude-sonnet-4.5', 'openai/gpt-5-mini', 'google/gemini-2.5-flash']
+    'anthropic/claude-haiku-4.5', 'anthropic/claude-sonnet-4.5', 'google/gemini-3-flash', 'google/gemini-2.5-flash',
+    'google/gemini-3.5-flash', 'google/gemini-2.5-flash-lite', 'openai/gpt-5-mini']
 
 _HDR = {'token': '', 'at': 0.0}      # 마지막 요청 헤더의 OIDC 토큰
 _MODEL = {'id': None, 'at': 0.0, 'list': None}
@@ -75,11 +76,16 @@ def _chat(prompt):
     last = None
     for m in [m for m in order if m not in bad][:12]:
         try:
-            out = _req('/chat/completions', {'model': m, 'max_tokens': 300, 'temperature': 0,
+            out = _req('/chat/completions', {'model': m, 'max_tokens': 2000, 'temperature': 0,
                                              'messages': [{'role': 'user', 'content': prompt}]})
+            text = out['choices'][0]['message'].get('content') or ''
+            if not text.strip():
+                last = f'{m}: 빈 답'
+                bad.add(m)
+                continue
             _MODEL['id'] = m
             LAST['model'] = m
-            return out['choices'][0]['message']['content'] or ''
+            return text
         except urllib.error.HTTPError as e:
             body = e.read().decode('utf-8', 'replace')[:300]
             last = f'{m}: HTTP {e.code} {body}'
@@ -135,7 +141,10 @@ def pick_items(muni_key, muni_name, item, names):
             text = _TEST[0](prompt)
         else:
             text = _chat(prompt)
-        js = json.loads(re.search(r'\{.*\}', text, re.S).group(0))
+        mt = re.search(r'\{.*\}', text or '', re.S)
+        if not mt:
+            raise ValueError(f'JSON 없음: {str(text)[:120]!r}')
+        js = json.loads(mt.group(0))
         got = [n for n in (js.get('items') or []) if isinstance(n, str) and n in names][:3]
         LAST['error'] = ''
     except Exception as e:
