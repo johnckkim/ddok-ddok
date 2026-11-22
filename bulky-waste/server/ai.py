@@ -10,7 +10,7 @@ import json, os, re, time, urllib.error, urllib.request
 from . import store
 
 BASE = 'https://ai-gateway.vercel.sh/v1'
-TIMEOUT = float(os.environ.get('AI_TIMEOUT', '8'))
+TIMEOUT = float(os.environ.get('AI_TIMEOUT', '11'))
 TTL = 30 * 86400
 PREFER = [m.strip() for m in os.environ.get('AI_MODEL', '').split(',') if m.strip()] + [
     'anthropic/claude-haiku-5.5', 'anthropic/claude-haiku-4.5', 'anthropic/claude-sonnet-5.5',   # 유료 크레딧이 있을 때
@@ -76,7 +76,7 @@ def _chat(prompt, only=None, budget=None):
     bad = _MODEL.setdefault('bad', set())
     slow = _MODEL.setdefault('slow', {})
     tries = LAST['tries'] = []
-    t_end = time.time() + (budget or float(os.environ.get('AI_BUDGET', '12')))
+    t_end = time.time() + (budget or float(os.environ.get('AI_BUDGET', '14')))
     last = None
     for m in [m for m in order if only or (m not in bad and slow.get(m, 0) < 2)][:12]:
         left = t_end - time.time()
