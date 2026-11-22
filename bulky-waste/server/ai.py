@@ -73,7 +73,7 @@ def _anthropic(prompt):
     """ANTHROPIC_API_KEY 가 있으면 Claude API를 바로 쓴다(빠르고 판단이 좋다)."""
     m = os.environ.get('ANTHROPIC_MODEL', 'claude-haiku-5-5')
     req = urllib.request.Request('https://api.anthropic.com/v1/messages', method='POST', data=json.dumps({
-        'model': m, 'max_tokens': 1024, 'thinking': {'type': 'disabled'}, 'messages': [{'role': 'user', 'content': prompt}]}).encode(),
+        'model': m, 'max_tokens': 4000, 'output_config': {'effort': os.environ.get('ANTHROPIC_EFFORT', 'low')}, 'messages': [{'role': 'user', 'content': prompt}]}).encode(),
         headers={'x-api-key': os.environ['ANTHROPIC_API_KEY'], 'anthropic-version': '2023-06-01', 'content-type': 'application/json'})
     with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
         out = json.loads(r.read().decode('utf-8'))
@@ -190,10 +190,10 @@ def pick_items(muni_key, muni_name, item, names):
             text = _TEST[0](prompt)
         else:
             text = _chat(prompt)
-        mt = re.search(r'\{.*\}', text or '', re.S)
-        if not mt:
+        i = (text or '').find('{')
+        if i < 0:
             raise ValueError(f'JSON 없음: {str(text)[:120]!r}')
-        js = json.loads(mt.group(0))
+        js = json.JSONDecoder().raw_decode(text[i:])[0]     # 첫 JSON 하나만(뒤에 붙은 글·두 번째 JSON 무시)
         got = [n for n in (js.get('items') or []) if isinstance(n, str) and n in names][:3]
         LAST['error'] = ''
     except Exception as e:
