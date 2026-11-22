@@ -364,7 +364,7 @@
   function linesHTML(rows, id) {
     return '<ul class="lines">' + rows.map(function (r, i) {
       return '<li data-i="' + i + '">' + pickBox(rows, i, id) + '<span class="nm">' + itemCell(r) + '</span><span class="sp">(' + esc(r._spec || r['규격']) + ')</span>' +
-        '<span class="fe">' + esc(r._fee || r['수수료']) + '</span>' + ((r._note || r['안내']) ? '<span class="nt">' + esc(r._note || r['안내']) + '</span>' : '') + '</li>';
+        '<span class="fe">' + esc(r._fee || r['수수료']) + '</span>' + (id ? rowCart(r, i) : '') + ((r._note || r['안내']) ? '<span class="nt">' + esc(r._note || r['안내']) + '</span>' : '') + '</li>';
     }).join('') + '</ul>';
   }
   function tableHTML(rows, id) {
@@ -382,7 +382,7 @@
         var i = rows.indexOf(r);
         body += '<tr data-i="' + i + '"' + (same ? ' class="same"' : '') + '><td class="item">' + pickBox(rows, i, id) + itemCell(r) +
           ((r._note || r['안내']) ? '<span class="note-inline">' + esc(r._note || r['안내']) + '</span>' : '') + '</td>' +
-          '<td>' + esc(r._spec || r['규격']) + '</td><td class="fee">' + esc(r._fee || r['수수료']) + '</td></tr>';
+          '<td>' + esc(r._spec || r['규격']) + '</td><td class="fee">' + esc(r._fee || r['수수료']) + (id ? rowCart(r, i) : '') + '</td></tr>';
       });
     });
     return '<table class="fees' + (hasNote ? ' has-note' : '') + '"><colgroup><col class="c-item"><col class="c-spec"><col class="c-fee"></colgroup>' +
@@ -398,14 +398,45 @@
       if (c) pick.push(rows[+c.value]); else miss.push(g.shown);
     });
     if (miss.length) { toast(t('pickFirst', { x: miss.join(', ') })); return; }
+    pushCart(pick);
+  }
+  /* 줄마다 붙은 장바구니 아이콘: 그 규격 한 줄만 바로 담는다 */
+  function addRow(btn) {
+    var el = btn.closest('.msg'), r = (el._rows || [])[+btn.dataset.addrow];
+    if (!r) return;
+    pushCart([r]);
+    btn.classList.add('done'); setTimeout(function () { btn.classList.remove('done'); }, 1200);
+  }
+  function pushCart(pick) {
     pick.forEach(function (r) {
       var hit = state.cart.filter(function (c) { return c.item === r['품목'] && c.spec === r['규격'] && c.fee === r['수수료']; })[0];
       if (hit) hit.qty = Math.min(99, hit.qty + 1);
       else state.cart.push({ item: r['품목'], spec: r['규격'], fee: r['수수료'], note: r['안내'] || '', qty: 1,
         dItem: r._item || r['품목'], dSpec: r._spec || r['규격'], dNote: r._note || r['안내'] || '', dFee: r._fee || r['수수료'] });
+      bridge(r);
     });
     renderCart();
     toast(t('added', { n: pick.length }));
+  }
+  /* ---------- 앱 연동 자리: 우리동네플러스 앱에 심으면 실제 장바구니로 넘긴다 ----------
+     담을 때마다 아래 4곳으로 같은 내용을 보낸다(있는 것만).
+       1) window 이벤트 'bw:add-to-cart' (detail = 아래 item)
+       2) window.UdongCart.add(item)            — 앱이 이 함수를 넣어 두면 호출
+       3) window.ReactNativeWebView.postMessage — RN 웹뷰
+       4) window.parent.postMessage            — iframe 으로 심었을 때
+     item = { type, municipality(코드), municipalityName, item(조례 한국어 이름), spec, fee(숫자 또는 null), feeText, note, qty:1 } */
+  function bridge(r) {
+    var item = { type: 'bw:add-to-cart', municipality: state.muni, municipalityName: state.muniName,
+      item: r['품목'], spec: r['규격'], fee: feeNum(r['수수료']), feeText: r['수수료'], note: r['안내'] || '', qty: 1 };
+    try { window.dispatchEvent(new CustomEvent('bw:add-to-cart', { detail: item })); } catch (e) { /* 무시 */ }
+    try { if (window.UdongCart && typeof window.UdongCart.add === 'function') window.UdongCart.add(item); } catch (e) { /* 무시 */ }
+    try { if (window.ReactNativeWebView) window.ReactNativeWebView.postMessage(JSON.stringify(item)); } catch (e) { /* 무시 */ }
+    try { if (window.parent && window.parent !== window) window.parent.postMessage(item, '*'); } catch (e) { /* 무시 */ }
+  }
+  var CART_SVG = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M3 4h2l2.2 10.2a1.5 1.5 0 0 0 1.5 1.2h8.6a1.5 1.5 0 0 0 1.5-1.1L21 8H6.2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>' +
+    '<circle cx="9.5" cy="19.5" r="1.5" fill="currentColor"/><circle cx="17" cy="19.5" r="1.5" fill="currentColor"/><path class="plus" d="M13 9v4M11 11h4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+  function rowCart(r, i) {
+    return '<button type="button" class="row-cart" data-addrow="' + i + '" aria-label="' + esc((r._item || r['품목']) + ' ' + (r._spec || r['규격']) + ' — ' + t('addCart')) + '" title="' + esc(t('addCart')) + '">' + CART_SVG + '</button>';
   }
   function relabelCart() {
     if (!state.cart.length) return Promise.resolve();
@@ -492,6 +523,8 @@
       }).catch(function (err) { toast(err.message); });
   }
   thread.addEventListener('click', function (e) {
+    var rc = e.target.closest('[data-addrow]');
+    if (rc) { addRow(rc); return; }
     var b = e.target.closest('[data-act="cart"]');
     if (b) { addToCart(b.closest('.msg')); return; }
     var c = e.target.closest('[data-cart]');

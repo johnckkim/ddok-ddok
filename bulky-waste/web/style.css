@@ -333,3 +333,16 @@ table.fees tr.same td.item::after { content: "〃"; color: var(--ink-3); }
 .msg small.ko { display: block; font-weight: 500; font-size: 12px; color: var(--ink-3); }
 .msg .cartlist small.ko { display: inline; }
 @media (max-width: 420px) { .lang-btn { width: 36px; } }
+
+/* 줄마다 장바구니 담기 아이콘 */
+.msg .row-cart { display: inline-grid; place-items: center; width: 36px; height: 36px; margin-left: 6px; vertical-align: middle; flex: none;
+  border-radius: 999px; border: 1px solid var(--line); background: var(--panel); color: var(--brand); cursor: pointer; padding: 0; }
+.msg .row-cart:hover { border-color: var(--brand); background: var(--brand-soft); }
+.msg .row-cart.done { background: var(--brand); color: var(--brand-ink); border-color: var(--brand); }
+.msg .lines li .row-cart { order: 3; }
+.msg .lines li .nt { order: 4; }
+.msg table.fees td.fee { white-space: nowrap; }
+.msg table.fees td.fee .row-cart { margin-left: 4px; width: 32px; height: 32px; }
+.msg table.fees col.c-fee, .msg table.fees.has-note col.c-fee { width: 36%; }
+.msg table.fees col.c-item, .msg table.fees.has-note col.c-item { width: 32%; }
+.msg table.fees col.c-spec, .msg table.fees.has-note col.c-spec { width: 32%; }

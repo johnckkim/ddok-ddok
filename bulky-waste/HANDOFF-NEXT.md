@@ -60,6 +60,11 @@
    - 내려받기: `POST /api/quote/export` 에 행마다 `수량` 을 넣으면 수량·금액 칸과 합계 줄이 붙는다(없으면 예전 4칸 그대로).
    - 장바구니는 메모리에만 있고(새로고침하면 비움), 지역을 바꾸면 비운다(수수료가 지역마다 다름).
    - 지역은 기억하지 않는다: 예전 `localStorage['bw.muni']` 는 첫 로드 때 지운다.
+   - **앱 장바구니 연동 자리**(`web/app.js` `bridge()`): 답변 줄마다 붙은 장바구니 아이콘이나 '장바구니에 담기'를 누를 때마다
+     같은 내용을 ① `window` 이벤트 `bw:add-to-cart`(detail) ② `window.UdongCart.add(item)`(앱이 넣어 두면 호출)
+     ③ `ReactNativeWebView.postMessage(JSON)` ④ iframe이면 `parent.postMessage(item)` 로 보낸다.
+     item = `{type:'bw:add-to-cart', municipality, municipalityName, item(조례 한국어 이름), spec, fee(숫자|null), feeText, note, qty:1}`.
+     앱에 심을 때는 ②나 ③을 받아 실제 장바구니(스티커 결제)에 넣으면 된다.
 
 ## 7. 로컬에서 시작
 ```bash
