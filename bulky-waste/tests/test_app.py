@@ -382,6 +382,10 @@ def test_cron_requires_secret():
 # ------------------------------------------------------------------ 2. 금지어(마지막에 모든 고객 응답 일괄 검사)
 def test_customer_pages_and_static_clean():
     for u in ('/', '/static/app.js', '/static/style.css', '/static/icon.svg', '/api/municipalities', '/api/health'):
+        pass
+    for u in ('/static/udong.png', '/static/udong-512.png'):
+        assert client.get(u).status_code == 200 and client.get(u).headers['content-type'] == 'image/png'
+    for u in ('/', '/static/app.js', '/static/style.css', '/api/municipalities', '/api/health'):
         r = cust('get', u)
         assert r.status_code == 200, u
     big = quote('매트리스 토퍼', '유아용 쿠션', '공기청정기 필터', '덤벨', '절구', '파라솔', '냉장고', 'TV', '에어컨', '책장', '의자', '스키',

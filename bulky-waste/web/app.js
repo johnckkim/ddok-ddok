@@ -50,7 +50,7 @@
   function addBot(html, cls) {
     var el = document.createElement('div');
     el.className = 'msg bot' + (cls ? ' ' + cls : '');
-    el.innerHTML = '<img class="avatar" src="/static/icon.svg" alt="" width="30" height="30"><div class="bubble">' + html + '</div>';
+    el.innerHTML = '<img class="avatar" src="/static/udong.png" alt="" width="30" height="30"><div class="bubble">' + html + '</div>';
     thread.appendChild(el); scrollEnd(); return el;
   }
   function typing() {
