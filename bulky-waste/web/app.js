@@ -465,7 +465,7 @@
     });
   }
   /* 면적·길이·무게 단위 요금, 기본+추가 요금: 수량은 단위 수이고 합계가 달라질 수 있다 */
-  var UNIT_RE = /(\d[\d.,]*\s*(㎡|m2|m²|평|cm|㎝|m|kg|㎏|ℓ|L|리터|톤|인치)\s*(당|마다))|당\s*\)|추가|초과\s*시|마다/;
+  var UNIT_RE = /(\d[\d.,]*\s*(㎡|m2|m²|평|cm|㎝|m|kg|㎏|ℓ|L|리터|톤|인치)\s*(당|마다))|(㎡|평|cm|㎝|m|kg|㎏|ℓ|리터|톤)\s*당\s*\)|추가|초과\s*시|마다/;   // '개당·장당'은 한 개 값이라 제외
   function isUnit(c) { return UNIT_RE.test(String(c.spec || '')); }
   function cartTotal() {
     var sum = 0, other = 0;
