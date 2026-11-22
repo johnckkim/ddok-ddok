@@ -151,9 +151,12 @@
     });
     return starts.concat(has).slice(0, 8);
   }
+  var DEFAULT_PLACE = 'gwacheon';     // 다른 지자체 답변을 다듬는 동안 첫 화면 바로가기는 과천시
   function askPlace(again) {
     $('#muniPill').hidden = true;
-    addBot(t(again ? 'askPlaceAgain' : 'askPlace'));
+    var d = MUNIS.filter(function (m) { return m.code === DEFAULT_PLACE; })[0];
+    addBot(t(again ? 'askPlaceAgain' : 'askPlace') +
+      (d ? '<div class="chips"><button type="button" data-place="' + esc(d.code) + '">' + esc(d.disp || d.name) + '</button></div>' : ''));
     setMode('place');
   }
   function greetItems() {

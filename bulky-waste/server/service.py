@@ -30,19 +30,23 @@ def _local_analog(q, local):
     """엔진 유사품목 찾기와 같되, 키워드가 맨 앞에 있고 나머지가 따로 아는 품목이면 쓰지 않는다
     ('드럼세탁기'는 '드럼'(악기)이 아니라 세탁기)."""
     k = E.norm(q); hits = []; first = None
-    known = {E.norm(a) for a, _ in E.ANALOG} | {E.norm(b) for _, b in E.ANALOG} | {t for r in local for t in r['tok']}
+    tried = []
     for qk, lk in E.ANALOG:
         nk = E.norm(qk)
         if first and len(nk) < len(E.norm(first)):
             break
         if nk in k:
-            rest = k[len(nk):] if k.startswith(nk) else ''
-            if rest and len(rest) >= 2 and rest in known:
+            tail = k[k.rfind(nk) + len(nk):]
+            if tail and tail not in ('기', '기계', '세트', '어', '용'):      # 키워드가 끝(합성어의 머리)에 있어야 한다: 드럼통≠드럼
                 continue
+            if any(nk in t and nk != t for t in tried):                        # 더 긴 키워드가 맞았는데 행이 없으면 짧은 것으로 내려가지 않음
+                continue
+            tried.append(nk)
             key = E.norm(lk)
-            hit = [row for row in local if key in row['tok']]
-            if not hit and len(key) >= 2:
-                hit = [row for row in local if any(key in t for t in row['tok'])]
+            ok_row = lambda row: not C.CATCH_ALL.search(row['name'])
+            hit = [row for row in local if key in row['tok'] and ok_row(row)]
+            if not hit and len(key) >= 2:                                     # 끝말 일치만(컴퓨터 ≠ 컴퓨터책상, 다리미 ≠ 다리미판)
+                hit = [row for row in local if ok_row(row) and any(t.endswith(key) for t in row['tok'])]
             if hit:
                 first = first or qk
                 hits += [h for h in hit if h not in hits]
@@ -52,7 +56,15 @@ def _local_analog(q, local):
 E.local_head = _local_head
 E.local_analog = _local_analog
 # 엔진 유사품목 사전 보강(엔진 파일은 건드리지 않고 여기서 더한다)
-for _p in [('화분', '항아리'), ('화분', '고무통'), ('킥보드', '자전거'), ('씽씽카', '자전거'), ('전기장판', '전기매트'), ('전기장판', '온수매트'), ('전기장판', '옥매트'), ('전기요', '전기매트'),
+# 검수에서 엉뚱하다고 본 유사품목 짝은 뺀다(EQUIV 순서 규칙으로 옮겼거나 확인 후 안내가 낫다)
+for _p in [('개집', '고무통'), ('캣휠', '고무통'), ('게시판', '입간판'), ('드럼', '피아노'), ('화환', '액자'), ('목발', '스키'),
+           ('골프채', '스키'), ('발마사지기', '운동기구'), ('안전문', '상'), ('나무판자', '상'), ('야전침대', '상'), ('솜', '단열재'),
+           ('맥주', '전기밥솥'), ('에어매트', '고무통'), ('현악기', '기타'), ('쓰레기통', '플라스틱류'), ('복합기', '프린터'),
+           ('화이트보드', '간판'), ('칠판', '간판'), ('캣타워', '신발장'), ('사물함', '신발장'), ('쿠션', '인형류'),
+           ('제습기', '가습기'), ('후드', '다리미'), ('환풍기', '다리미')]:
+    while _p in E.ANALOG:
+        E.ANALOG.remove(_p)
+for _p in [('화분', '항아리'), ('맥주제조기', '전기밥솥'), ('화분', '고무통'), ('킥보드', '자전거'), ('씽씽카', '자전거'), ('전기장판', '전기매트'), ('전기장판', '온수매트'), ('전기장판', '옥매트'), ('전기요', '전기매트'),
            ('러닝머신', '운동기구'), ('런닝머신', '운동기구'), ('워킹머신', '운동기구')]:
     if _p not in E.ANALOG:
         E.ANALOG.append(_p)
@@ -647,6 +659,52 @@ def _shop_rescue(c, name):
     return _card_public(st, card)
 
 
+# ---- AI가 고른 항목이 '한 물건의 크기'인지 검사(2026-11-23 검수: 11,971개 후보 중 973개가 다른 물건·봉투·단가 묶음) ----
+_BUNDLE = re.compile(r'묶음|마대|포대|봉투|봉지|자루|다발')
+_NOTE = re.compile(r'문의|※|준용|경우\s*:')
+_RATE = re.compile(r'(kg|㎏|킬로그램|킬로|ℓ|리터|L|㎥|톤|ton)\s*\)?\s*(당|마다)|톤\s*차량|㎥')
+_ADD2 = re.compile(r'추가|초과\s*시|마다|가산|(?:㎡|m²|㎥|평|kg|킬로그램|m|미터|cm|단|ℓ|L|리터)\s*\)?\s*당')
+_SIZED = re.compile(r'\d|이상|이하|미만|초과|[소중대]\s*형|특대|싱글|더블|퀸|킹|인용|모든\s*규격|일반|기본|전체|가정|업소|영업|사무|유아|아동|어린이|성인|어른|'
+                    r'목재|철재|철제|스텐|플라스틱|대리석|원목|유리|스탠드|벽걸이|전기|가스|석유|수동|전동|접이|좌식|입식|서랍|편수|양수|'
+                    r'그랜드|업라이트|어프라이트|디지털|겨울|여름|하절기|동절기|반신|전신|연탄|기름|홑|솜|거울|상판|틀|받침|세트|셋트|프레임|포함|것$|용$|형$|^\s*[소중대]\s*$')
+_PAREN = re.compile(r'\([^()]*\)')
+
+
+def _not_one_object(rows, name):
+    """규격 줄이 그 물건의 크기가 아니라 다른 물건·봉투 묶음·무게 단가·안내문이면 True."""
+    specs = [str(o.get('spec') or '').strip() for o in rows]
+    if not specs:
+        return True
+    if all(_RATE.search(s) for s in specs):
+        return True
+    if any(_BUNDLE.search(s) or _NOTE.search(s) for s in specs):
+        return True
+    add = [s for s in specs if _ADD2.search(s)]
+    if add and len(add) < len(specs):
+        return True
+    heads = [h[-2:] for h in re.findall(r'[가-힣]{2,}', _PAREN.sub(' ', name or ''))]
+    bare = {re.sub(r'\s', '', _PAREN.sub('', s)) for s in specs if re.search(r'[가-힣]{2,}', _PAREN.sub('', s))
+            and not _SIZED.search(s) and not any(h in s for h in heads)}
+    return len(bare) >= 2
+
+
+def _own_rows(c, x, label):
+    """조례 항목 x '자기' 줄만(resolve 는 괄호를 떼고 다른 항목까지 묶어 올 수 있다). 한 줄 여러 품목 이름의 낱개면 그 줄."""
+    clean = lambda n: re.sub(r'\s+', ' ', re.sub(r'\s*\(\d+\)\s*', ' ', n or '')).strip()
+    own = [r for r in c.local if clean(r['disp_item'] or r['name']) == x or clean(r['name']) == x]
+    if not own:
+        own = [r for r in c.local if x in [p.strip() for p in re.split(r'[,ㆍ·/+]', _PAREN.sub('', r['name']))]]
+    if not own:
+        conf = [r for r in c.conf if r['name'] == x]
+        if conf:
+            return [{'item': label, 'spec': C.tidy_spec(r['spec'] or '모든규격'), 'fee': r['fee'], 'note': ''} for r in sorted(conf, key=lambda r: r['fee'])]
+        return None
+    rows = _group_rows(own, label)
+    for o in rows:
+        o['item'] = label
+    return rows
+
+
 def _ai_rescue(c, name):
     """조례에서 못 찾은 이름 → AI가 이 지자체 조례 품목명 중에서 고른다 → 조례 금액으로 바로 안내되는 첫 품목을
     '○○ 맞으신가요?'로 묻는다. 나머지 후보는 '아니요' 다음 선택지로 쓴다. AI를 쓸 수 없으면 None."""
@@ -658,9 +716,13 @@ def _ai_rescue(c, name):
     picks = ai.pick_items(c.muni, c.name, name, names)
     ok = []
     for p in picks:
-        res = resolve(c, p, label=p)
-        if res['kind'] == 'rows' and not res.get('review'):
-            ok.append(({'id': p, 'label': p, 'query': p, 'desc': ''}, res))
+        own = _own_rows(c, p, p)
+        res = {'kind': 'rows', 'rows': own} if own else resolve(c, p, label=p)
+        if res['kind'] != 'rows' or res.get('review') or not res['rows']:
+            continue
+        if _not_one_object(res['rows'], p) or _unclear(res['rows']):
+            continue                     # 나무류(합판·팔레트)·봉투 묶음·단가 줄은 물건의 크기로 안내하지 않는다
+        ok.append(({'id': p, 'label': p, 'query': p, 'desc': ''}, res))
     if not ok:
         return None
     top, res = ok[0]
@@ -813,7 +875,8 @@ def _log_expression(c, expr, label, query):
 
 def _finish(c, expr, d, size=None, label=None, as_item=False):
     label = label or (expr if as_item else C.with_expr(d['label'], expr) if C.is_brand(expr) else d['label'])
-    res = resolve(c, d['query'], label=label)
+    own = _own_rows(c, d['query'], label) if as_item else None
+    res = {'kind': 'rows', 'rows': own, 'result': {}} if own else resolve(c, d['query'], label=label)
     _log_expression(c, expr, d['label'], d['query'])
     if res['kind'] == 'rows':
         rows = res['rows']

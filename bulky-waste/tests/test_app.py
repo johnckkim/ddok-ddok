@@ -643,3 +643,15 @@ def test_examples_only_answerable_items():
     for q in j['items']:
         r = S.resolve(c, q)
         assert r['kind'] == 'rows' and any(o.get('fee') for o in r['rows']), (q, r)
+
+
+def test_ai_pick_rejects_material_groups():
+    """AI가 '나무류'(합판·팔레트·판넬·20ℓ 묶음)를 골라도 물건 크기가 아니므로 건너뛴다(서천 캣타워)."""
+    from server import service as S
+    rows = [{'item': 'x', 'spec': s, 'fee': f} for s, f in
+            [('20ℓ 1묶음', 2000), ('합판류(소)', 2000), ('지게차 팔레트', 4000), ('공사용 판넬', 5000)]]
+    assert S._not_one_object(rows, '나무류')
+    assert not S._not_one_object([{'item': 'x', 'spec': '1인용', 'fee': 3000}, {'item': 'x', 'spec': '2인용', 'fee': 5000}], '소파')
+    assert not S._not_one_object([{'item': 'x', 'spec': '높이 1m 미만', 'fee': 2000}, {'item': 'x', 'spec': '높이 1m 이상', 'fee': 3000}], '신발장')
+    from server import catalog as C
+    assert C.CATCH_ALL.search('나무류') and C.CATCH_ALL.search('기타100') and not C.CATCH_ALL.search('기타(악기)')
