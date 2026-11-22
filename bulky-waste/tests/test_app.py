@@ -603,3 +603,22 @@ def test_translate_endpoint_and_cache():
         assert client.post('/api/translate', json={'lang': 'xx', 'texts': ['소파']}).status_code == 400
     finally:
         ai._TEST[:] = []
+
+
+def test_ai_pick_accepts_name_inside_comma_list():
+    """'벽시계, 가방, …, 항아리' 한 줄 조례 항목: AI가 '항아리'만 답해도 받아들인다(서천 화분)."""
+    from server import ai
+    ai._TEST[:] = [lambda p: '{"items": ["항아리"], "what": "도자기 화분"}']
+    try:
+        got = ai.pick_items('test-comma', '시험군', '화분 대형', ['벽시계, 가방, 거울, 항아리', '자전거'])
+        assert got == ['항아리'], got
+    finally:
+        ai._TEST[:] = []
+
+
+def test_powered_item_uses_manual_top_tier():
+    """전동킥보드: 조례에 수동형도 없으면 수동형이 매겨지는 항목의 최고 구간 + 배터리 안내."""
+    from server import service as S
+    c = S.ctx('gwacheon')
+    res = S.resolve(c, '전동킥보드')
+    assert res['kind'] == 'rows' and len(res['rows']) == 1 and '배터리' in (res['rows'][0].get('note') or ''), res

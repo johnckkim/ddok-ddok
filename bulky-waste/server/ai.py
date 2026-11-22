@@ -177,10 +177,18 @@ JSON 한 줄로만 답한다: {{"items": ["품목명", ...], "what": "이 물건
 
 def pick_items(muni_key, muni_name, item, names):
     """조례 품목명 목록(names) 중 item 을 배출할 품목 0~3개. 실패·불가면 []."""
-    names = [n for n in dict.fromkeys(n.strip() for n in names) if n][:400]
+    # '벽시계, 가방, 거울, …, 항아리'처럼 한 줄에 여러 품목을 적은 조례는 낱개 이름으로 풀어 준다
+    # (AI가 '항아리'라고 답해도 받아들일 수 있게). 조례 원래 이름도 그대로 둔다.
+    full = [n for n in dict.fromkeys(n.strip() for n in names) if n]
+    parts = []
+    for n in full:
+        ps = [p.strip() for p in re.split(r'[,ㆍ·/+]', re.sub(r'\(.*?\)', '', n)) if p.strip()]
+        if len(ps) >= 2:
+            parts += [p for p in ps if len(p) >= 2]
+    names = list(dict.fromkeys(full + parts))[:600]
     if not names or not available():
         return []
-    key = 'ai:' + muni_key + ':' + re.sub(r'\s+', '', item.lower())
+    key = 'ai2:' + muni_key + ':' + re.sub(r'\s+', '', item.lower())     # ai2: 낱개 이름 풀기 전 캐시(빈 답 포함)는 버린다
     hit = _cache(key)
     if hit is not None:
         return [n for n in hit if n in names]
@@ -194,7 +202,9 @@ def pick_items(muni_key, muni_name, item, names):
         if i < 0:
             raise ValueError(f'JSON 없음: {str(text)[:120]!r}')
         js = json.JSONDecoder().raw_decode(text[i:])[0]     # 첫 JSON 하나만(뒤에 붙은 글·두 번째 JSON 무시)
-        got = [n for n in (js.get('items') or []) if isinstance(n, str) and n in names][:3]
+        flat = {re.sub(r'\s+', '', n): n for n in names}
+        got = [flat.get(re.sub(r'\s+', '', n)) for n in (js.get('items') or []) if isinstance(n, str)]
+        got = [n for n in dict.fromkeys(got) if n][:3]          # 띄어쓰기만 다른 답도 받는다
         LAST['error'] = ''
     except Exception as e:
         body = ''

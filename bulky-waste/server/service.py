@@ -52,7 +52,7 @@ def _local_analog(q, local):
 E.local_head = _local_head
 E.local_analog = _local_analog
 # 엔진 유사품목 사전 보강(엔진 파일은 건드리지 않고 여기서 더한다)
-for _p in [('전기장판', '전기매트'), ('전기장판', '온수매트'), ('전기장판', '옥매트'), ('전기요', '전기매트'),
+for _p in [('화분', '항아리'), ('화분', '고무통'), ('킥보드', '자전거'), ('씽씽카', '자전거'), ('전기장판', '전기매트'), ('전기장판', '온수매트'), ('전기장판', '옥매트'), ('전기요', '전기매트'),
            ('러닝머신', '운동기구'), ('런닝머신', '운동기구'), ('워킹머신', '운동기구')]:
     if _p not in E.ANALOG:
         E.ANALOG.append(_p)
@@ -338,6 +338,10 @@ def _l2_rows(c, q, label, spec_only=False):
         names = {o['item'] for o in out}
         if names == {label}:
             nm = re.sub(r'\s*\(\d+\)\s*', ' ', src[0]['disp_item'] or src[0]['name']).strip()
+            comps = [p.strip() for p in re.split(r'[,ㆍ·/+]', nm) if p.strip()]
+            if len(comps) >= 3:      # '벽시계, 가방, …, 항아리' 한 줄 항목: 실제로 맞은 낱개 이름만
+                tgt = next((E.norm(lk) for qk, lk in E.ANALOG if E.norm(qk) in k), '')
+                nm = next((p for p in comps if tgt and E.norm(p) == tgt), None) or                     next((p for p in comps if head and E.norm(p).endswith(head)), None) or nm
             for o in out:
                 o['note'] = f'‘{nm}’ 항목으로 배출'
     return out
@@ -447,6 +451,15 @@ def resolve(c, q, label=None, expr=None):
                     rows2 = _with_siblings(c, head, rows2, label)
                 if rows2 and not review2:
                     return {'kind': 'rows', 'rows': rows2, 'result': dict(r2, 품목=q, 경로=f"끝말 '{head}'로 찾음"), 'review': False}
+    if '전동' in E.norm(q) and r['등급'].startswith('L2* 전동형') and not expr:
+        # 전동킥보드처럼 조례에 수동형도 없으면, 수동형(킥보드)이 매겨지는 항목의 규격을 보여 주고 배터리 안내를 붙인다
+        base = re.sub(r'전동\s*', '', q).strip()
+        if len(base) >= 2:
+            rb = resolve(c, base, label=label, expr=q)
+            if rb['kind'] == 'rows' and rb['rows'] and all(o.get('fee') for o in rb['rows']):
+                top = max(enumerate(rb['rows']), key=lambda t: (t[1]['fee'], t[0]))[1]   # 전동형은 수동형 최고 구간(같은 금액이면 뒤쪽=큰 규격)
+                rows_b = [dict(top, note=' · '.join(x for x in (top.get('note'), '배터리 분리 후 배출') if x))]
+                return {'kind': 'rows', 'rows': rows_b, 'result': dict(rb['result'], 품목=q, 경로=f"전동형 → 수동형 '{base}' 기준"), 'review': False}
     if r['등급'].startswith('L2* 유사품목'):
         # 통계와 차이가 커도 앞말이 규격 원문에 그대로 있으면(침대 │ 1인용 돌침대 세트) 그 줄이 답이다
         l2s = _l2_rows(c, q, label, spec_only=True)
