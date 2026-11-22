@@ -202,6 +202,7 @@ def cron_ai(request: Request, key: str = '', q: str = '베드 범퍼', m: str = 
     names = [x['disp_item'] or x['name'] for x in c.local]
     picks = ai.pick_items(c.muni, c.name, q, names) if names else []
     return {'available': ai.available(), 'model': ai.LAST.get('model') or ai._MODEL.get('id'), 'picks': picks,
+            'skipped': sorted(ai._MODEL.get('bad') or []), 'candidates': (ai._MODEL.get('list') or [])[:30],
             'error': ai.LAST.get('error'), 'quote': S.quote(m, [{'name': q}])}
 
 

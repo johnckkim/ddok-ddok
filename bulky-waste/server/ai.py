@@ -5,7 +5,7 @@
 - 인증: AI_GATEWAY_API_KEY(어디서나) 또는 Vercel 배포의 OIDC 토큰(환경변수 VERCEL_OIDC_TOKEN 또는 요청 헤더 x-vercel-oidc-token).
 - 같은 지자체·같은 이름은 30일 캐시(인스턴스 로컬 SQLite).
 """
-import json, os, re, time, urllib.request
+import json, os, re, time, urllib.error, urllib.request
 
 from . import store
 
@@ -17,7 +17,7 @@ PREFER = [m.strip() for m in os.environ.get('AI_MODEL', '').split(',') if m.stri
     'anthropic/claude-haiku-4.5', 'anthropic/claude-sonnet-4.5', 'openai/gpt-5-mini', 'google/gemini-2.5-flash']
 
 _HDR = {'token': '', 'at': 0.0}      # 마지막 요청 헤더의 OIDC 토큰
-_MODEL = {'id': None, 'at': 0.0}
+_MODEL = {'id': None, 'at': 0.0, 'list': None}
 _TEST = []                            # 테스트에서 가짜 응답 함수를 끼워 넣는 자리
 LAST = {'error': '', 'model': ''}
 
@@ -43,18 +43,53 @@ def _req(path, body=None, timeout=TIMEOUT):
         return json.loads(r.read().decode('utf-8'))
 
 
-def model():
-    if _MODEL['id'] and time.time() - _MODEL['at'] < 86400:
-        return _MODEL['id']
-    pick = PREFER[0]
+CHEAP = ('haiku', 'flash', 'mini', 'nano', 'lite', 'small', 'gpt-oss', 'llama', 'qwen', 'deepseek', 'mistral')
+
+
+def candidates():
+    """쓸 모델 후보(앞에서부터 시도). 무료 등급에서 막힌 모델은 건너뛴다."""
+    if _MODEL.get('list') and time.time() - _MODEL['at'] < 86400:
+        return _MODEL['list']
+    ids = []
     try:
-        ids = {m.get('id') for m in _req('/models', timeout=5).get('data', [])}
-        pick = next((m for m in PREFER if m in ids), None) or next(
-            (i for i in sorted(ids) if i.startswith('anthropic/claude-haiku')), PREFER[0])
-    except Exception as e:  # 목록을 못 받으면 첫 후보로 시도
+        data = _req('/models', timeout=5).get('data', [])
+        ids = [m.get('id') for m in data if m.get('id') and (m.get('type') in (None, 'language'))]
+    except Exception as e:
         LAST['error'] = f'models: {e}'
-    _MODEL.update(id=pick, at=time.time())
-    return pick
+    pref = [m for m in PREFER if not ids or m in ids]
+    cheap = [i for i in ids if i not in pref and any(k in i.lower() for k in CHEAP)
+             and not any(k in i.lower() for k in ('embed', 'image', 'tts', 'whisper', 'vision-only'))]
+    lst = pref + sorted(cheap, key=lambda i: (0 if 'haiku' in i else 1 if 'flash' in i else 2 if 'mini' in i else 3, i))
+    _MODEL.update(list=lst, at=time.time())
+    return lst
+
+
+def model():
+    return _MODEL.get('id') or (candidates() or PREFER)[0]
+
+
+def _chat(prompt):
+    """되는 모델을 찾을 때까지 차례로 시도(무료 등급 제한·없는 모델은 다음으로). 되는 모델은 기억한다."""
+    order = ([_MODEL['id']] if _MODEL.get('id') else []) + [m for m in candidates() if m != _MODEL.get('id')]
+    bad = _MODEL.setdefault('bad', set())
+    last = None
+    for m in [m for m in order if m not in bad][:12]:
+        try:
+            out = _req('/chat/completions', {'model': m, 'max_tokens': 300, 'temperature': 0,
+                                             'messages': [{'role': 'user', 'content': prompt}]})
+            _MODEL['id'] = m
+            LAST['model'] = m
+            return out['choices'][0]['message']['content'] or ''
+        except urllib.error.HTTPError as e:
+            body = e.read().decode('utf-8', 'replace')[:300]
+            last = f'{m}: HTTP {e.code} {body}'
+            if e.code in (400, 403, 404) and ('model' in body.lower() or 'provider' in body.lower() or 'tier' in body.lower()):
+                bad.add(m)
+                if _MODEL.get('id') == m:
+                    _MODEL['id'] = None
+                continue
+            raise RuntimeError(last)
+    raise RuntimeError(last or '쓸 수 있는 모델이 없습니다')
 
 
 def _cache(key, val=None):
@@ -99,11 +134,7 @@ def pick_items(muni_key, muni_name, item, names):
         if _TEST:
             text = _TEST[0](prompt)
         else:
-            m = model()
-            LAST['model'] = m
-            out = _req('/chat/completions', {'model': m, 'max_tokens': 200, 'temperature': 0,
-                                             'messages': [{'role': 'user', 'content': prompt}]})
-            text = out['choices'][0]['message']['content'] or ''
+            text = _chat(prompt)
         js = json.loads(re.search(r'\{.*\}', text, re.S).group(0))
         got = [n for n in (js.get('items') or []) if isinstance(n, str) and n in names][:3]
         LAST['error'] = ''
