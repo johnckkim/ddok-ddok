@@ -480,6 +480,43 @@ def _kind_fit(q, rows):
     return keep if keep and len(keep) < len(rows) and any(not o.get('method') for o in keep) else rows
 
 
+_FRAME_MM = re.compile(r'1,?[0-9]00\s*mm\s*(미만|이상)|([12])\s*인용')
+
+
+def _bed_frame(c, q, rows):
+    """'싱글침대'·'퀸침대'를 '상위어 침대'로 찾았는데 매트리스 줄만 나오면, 조례의 침대틀 줄 중 그 크기에 맞는 것을 함께 보여 준다."""
+    s1, s2 = bool(_SIZE1.search(q or '')), bool(_SIZE2.search(q or ''))
+    if '침대' not in (q or '') or s1 == s2:
+        return rows
+
+    def fits(spec):
+        m = _FRAME_MM.search(str(spec or '').replace(' ', ''))
+        if not m:
+            return None
+        return (m.group(1) == '미만' or m.group(2) == '1') if s1 else (m.group(1) == '이상' or m.group(2) == '2')
+    isframe = lambda o: '틀' in str(o.get('src') or '') + str(o.get('spec') or '')
+    keep = [o for o in rows if not (isframe(o) and fits(o.get('spec')) is False)]   # 싱글에 1,400mm 이상 틀, 퀸에 미만 틀은 뺀다
+    rows = keep or rows
+    if any(isframe(o) for o in rows):
+        return rows
+    lab = rows[0].get('item') if rows else q
+    add = []
+    for r in c.local:
+        txt = r['name'] + ' ' + r['spec']
+        if '침대' not in r['name'] or '틀' not in txt or re.search(r'2층|이층|벙커|돌|흙|유아|아기', txt):
+            continue
+        m = _FRAME_MM.search(r['spec'].replace(' ', ''))
+        if not m:
+            continue
+        ok = (m.group(1) == '미만' or m.group(2) == '1') if s1 else (m.group(1) == '이상' or m.group(2) == '2')
+        if ok:
+            sp = C.tidy_spec(r['disp_spec'] or r['spec'])
+            if '틀' not in sp:
+                sp = '침대틀 ' + sp                       # '1인용' → '침대틀 1인용'(매트리스 1인용과 구분)
+            add.append({'item': lab, 'spec': sp, 'fee': r['fee'], 'note': '', 'src': r['name']})
+    return add + rows if 0 < len(add) <= 2 else rows
+
+
 _ADULT_SIZE = re.compile(r'[2-9]인|더블|퀸|킹|슈퍼싱글|양수|대형|세트|업소|영업')
 
 
@@ -629,7 +666,7 @@ def _post1(c, q, label, expr, res):
                 for o in kept:                          # 아이 줄만 남았으면 고객이 쓴 이름으로
                     if not o.get('method'):
                         o['item'] = lab
-            res['rows'] = kept
+            res['rows'] = _bed_frame(c, expr or q, kept) if '상위어' in path else kept
         _mark_cart(res, lab)
         seen, uniq = set(), []
         for o in res['rows']:                             # 제품명으로 바꾼 뒤 같아진 줄은 하나만
@@ -660,7 +697,8 @@ def _mark_cart(res, label=None):
     # 확정표(L1)는 운영자가 정한 금액이지 조례 품목이 아니다 → 앱 카탈로그(=조례)에 없으므로 기타
     subst = any(k in path for k in _SUBST) or grade.startswith(('L1', 'L2*', 'L3', 'L4'))
     rows0 = [o for o in res.get('rows') or [] if not o.get('method')]
-    if subst and '규격 일치' in grade + path and rows0 and all(o.get('src') for o in rows0) and not any(k in path for k in ('과천 기준', '전국', 'AI')):
+    sized = path.startswith('상위어') and grade.startswith('L2 ') and label and (_SIZE1.search(label) or _SIZE2.search(label))
+    if subst and ('규격 일치' in grade + path or sized) and rows0 and all(o.get('src') for o in rows0) and not any(k in path for k in ('과천 기준', '전국', 'AI')):
         subst = False                      # 조례 규격 칸에 그 물건이 있는 줄(안마의자 → 의자 '안마의자' 줄): 조례 품목으로 담는다
     clean = lambda n: re.sub(r'\s+', ' ', re.sub(r'\s*\(\d+\)\s*', ' ', n or '')).strip()
     for o in res.get('rows') or []:

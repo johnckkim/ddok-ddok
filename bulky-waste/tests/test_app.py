@@ -821,3 +821,20 @@ def test_elec_free_catchall_and_guitar():
                                                              {'item': '기타', 'spec': '샌드백', 'fee': 2000, 'src': '기타'}]}
     out = S._drop_catchall(None, '기타', '기타', res)
     assert [o['spec'] for o in out['rows']] == ['기타(악기)']
+
+
+def test_sized_bed_adds_matching_frame():
+    """'싱글침대'가 매트리스 줄로만 나오면 조례의 1,400mm 미만·1인용 침대틀 줄을 함께, 퀸이면 미만 틀은 뺀다."""
+    from server import service as S
+
+    class R:
+        pass
+    c = R()
+    mk = lambda n, s, f: {'name': n, 'spec': s, 'fee': f, 'tok': S._tok(n), 'disp_item': '', 'disp_spec': ''}
+    c.local = [mk('침대틀', '1인용', 10000), mk('침대틀', '2인용', 15000), mk('침대 매트리스', '1인용', 5000)]
+    rows = [{'item': '싱글침대', 'spec': '1인용', 'fee': 5000, 'src': '침대 매트리스'}]
+    out = S._bed_frame(c, '싱글침대', rows)
+    assert [(o['spec'], o['fee']) for o in out] == [('침대틀 1인용', 10000), ('1인용', 5000)]
+    q = [{'item': '퀸침대', 'spec': '1400mm 미만', 'fee': 5000, 'src': '침대(침대틀)'},
+         {'item': '퀸침대', 'spec': '1400mm 이상', 'fee': 8000, 'src': '침대(침대틀)'}]
+    assert [o['fee'] for o in S._bed_frame(c, '퀸침대', q)] == [8000]
