@@ -156,6 +156,26 @@
     });
     return starts.concat(has).slice(0, 8);
   }
+  /* 오타 난 지역 이름('과천신', '광명')에 가까운 지역 최대 3곳(글자 하나 차이) */
+  function near(q) {
+    q = flat(q).replace(/(특별시|광역시|특별자치시|특별자치도)$/, '');
+    if (q.length < 2) return [];
+    var dist = function (a, b) {
+      var d = [], i, j;
+      for (i = 0; i <= a.length; i++) { d[i] = [i]; }
+      for (j = 1; j <= b.length; j++) d[0][j] = j;
+      for (i = 1; i <= a.length; i++) for (j = 1; j <= b.length; j++)
+        d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+      return d[a.length][b.length];
+    };
+    var out = [];
+    MUNIS.forEach(function (m) {
+      var parts = m.name.split(' '), last = flat(parts[parts.length - 1]), stem = last.replace(/(시|군|구)$/, '');
+      var k = Math.min(dist(q, last), dist(q, stem));
+      if (k <= (q.length >= 4 ? 2 : 1)) out.push([k, m]);
+    });
+    return out.sort(function (a, b) { return a[0] - b[0]; }).slice(0, 3).map(function (x) { return x[1]; });
+  }
   var DEFAULT_PLACE = 'gwacheon';     // 다른 지자체 답변을 다듬는 동안 첫 화면 바로가기는 과천시
   function askPlace(again) {
     $('#muniPill').hidden = true;
@@ -222,7 +242,9 @@
       var miss = function (k) {
         var kk = String(k).replace(/\s+/g, '');
         var place = /(특별시|광역시|특별자치|시|군|구|도|읍|면|동)$/.test(kk) && !/(기구|가구|완구|문구|도구|공구|용구|냉동)$/.test(kk);
-        if (place) addBot(t('noArea', { n: MUNIS.length }));
+        var nb = place ? near(kk) : [];
+        if (place) addBot(esc(t('noArea', { n: MUNIS.length })) + (nb.length ? '<br>' + esc(t('didYouMean')) +
+          '<div class="chips">' + nb.map(function (m) { return '<button type="button" data-place="' + esc(m.code) + '">' + esc(m.disp || m.name) + '</button>'; }).join('') + '</div>' : ''));
         else { state.waiting = text; addBot(t('needPlace', { x: esc(text) })); }
       };
       if (hasHangul(text)) { miss(text); return; }

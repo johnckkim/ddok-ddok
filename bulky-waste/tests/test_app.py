@@ -801,3 +801,23 @@ def test_size_and_kind_fit():
     assert [o['fee'] for o in S._kind_fit('의자', chair)] == [2000]
     fr = [{'spec': '300ℓ 미만', 'fee': 4000}, {'spec': '업소용', 'fee': 20000}]
     assert len(S._kind_fit('냉장고', fr)) == 2
+
+
+def test_elec_free_catchall_and_guitar():
+    """조례 무상 줄에 '기타 폐전기·폐전자제품'이 있으면 가전은 무상. 악기 '기타'는 조례의 '기타'(그 밖의 물건) 줄로 답하지 않는다."""
+    from server import service as S
+
+    class R:
+        pass
+    c = R()
+    c.methods = [{'name': '기타 폐전기·폐전자제품 등 유사품목', 'spec': '모든규격', 'method': '무상수거', 'tok': ()}]
+    assert S._elec_free(c, '전자레인지')['method'] == '무상수거'
+    assert S._elec_free(c, '장롱') is None and S._elec_free(c, 'TV장') is None
+    c.methods = [{'name': '기타(소형 가전제품)', 'spec': '모든규격', 'method': '무상수거', 'tok': ()}]
+    assert S._elec_free(c, '김치냉장고') is None
+    c.methods = [{'name': '냉장고', 'spec': '모든규격', 'method': '무상수거', 'tok': ()}]
+    assert S._elec_free(c, '전자레인지') is None
+    res = {'kind': 'rows', 'result': {'등급': 'L0'}, 'rows': [{'item': '기타', 'spec': '기타(악기)', 'fee': 2000, 'src': '기타(악기)'},
+                                                             {'item': '기타', 'spec': '샌드백', 'fee': 2000, 'src': '기타'}]}
+    out = S._drop_catchall(None, '기타', '기타', res)
+    assert [o['spec'] for o in out['rows']] == ['기타(악기)']

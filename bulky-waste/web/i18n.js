@@ -66,6 +66,7 @@
       'Tôi sẽ hướng dẫn theo quy định của <b>{m}</b>.<br>Nhập đồ cần bỏ, nhiều món thì cách nhau bằng dấu phẩy (,).',
       'จะแจ้งตามเกณฑ์ของ <b>{m}</b><br>พิมพ์สิ่งที่จะทิ้ง หลายรายการให้คั่นด้วยจุลภาค (,)',
       'Расскажу по тарифам: <b>{m}</b>.<br>Введите, что хотите выбросить. Несколько предметов — через запятую (,).'],
+    didYouMean: ['혹시 이 지역인가요?', 'Did you mean one of these?', '您是指以下地区吗？', 'Có phải bạn muốn tìm khu vực này?', 'หมายถึงพื้นที่นี้หรือไม่?', 'Может быть, вы имели в виду этот район?'],
     noArea: ['아직 안내하지 않는 지역이에요. 시·군·구 이름을 다시 확인해 주세요. (현재 {n}곳 안내)', 'We don’t cover that area yet. Please check the name. ({n} areas covered)', '暂不支持该地区，请确认名称。（目前支持{n}个地区）', 'Chưa hỗ trợ khu vực này. Vui lòng kiểm tra lại tên. (Hiện có {n} khu vực)', 'ยังไม่รองรับพื้นที่นี้ กรุณาตรวจสอบชื่ออีกครั้ง (รองรับ {n} พื้นที่)', 'Этот район пока не поддерживается. Проверьте название. (Доступно районов: {n})'],
     needPlace: ['먼저 <b>거주하고 계신 지자체(시·군·구)</b>를 알려 주세요. 지역마다 수수료가 달라요. 지역을 고르면 <b>{x}</b> 수수료를 바로 안내해 드릴게요.',
       'First, please tell me <b>your city, county or district</b> — fees differ by area. I’ll answer <b>{x}</b> right after you choose.',
@@ -170,7 +171,19 @@
   }
 
   /* 답변 속 글 번역(한국어면 그대로). 같은 글은 한 번만 묻는다. */
-  var memo = {}, tags = {};
+  var memo = {}, tags = {}, SKEY = 'bw.tr1';
+  try { memo = JSON.parse(localStorage.getItem(SKEY) || '{}') || {}; } catch (e) { memo = {}; }   // 번역 결과만 저장(지역은 저장하지 않음)
+  var saveT = null;
+  function persist() {
+    clearTimeout(saveT);
+    saveT = setTimeout(function () {
+      try {
+        var ks = Object.keys(memo);
+        if (ks.length > 3000) ks.slice(0, ks.length - 3000).forEach(function (k) { delete memo[k]; });   // 오래된 것부터 버림
+        localStorage.setItem(SKEY, JSON.stringify(memo));
+      } catch (e) { /* 저장 못 해도 동작에는 지장 없음 */ }
+    }, 500);
+  }
   function addTags(tk) { if (tk) Object.keys(tk).forEach(function (k) { tags[k] = tk[k]; }); }
   function tr(texts, to) {
     var lang = to || cur;
@@ -186,7 +199,7 @@
       return fetch('/api/translate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lang: lang, texts: p, tk: tk }) })
         .then(function (r) { return r.ok ? r.json() : null; })
         .then(function (j) {          // 실패(429 등)는 기억하지 않는다 → 다음에 다시 시도
-          if (j && j.texts) j.texts.forEach(function (v, n) { if (v && v !== p[n]) memo[lang + '|' + p[n]] = v; });
+          if (j && j.texts) { j.texts.forEach(function (v, n) { if (v && v !== p[n]) memo[lang + '|' + p[n]] = v; }); persist(); }
         })
         .catch(function () { /* 다음에 다시 */ });
     })).then(done);

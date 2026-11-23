@@ -192,7 +192,10 @@ def clean_name(s):
 
 def _method_hit(c, q):
     k = E.norm(q)
-    return [m for m in c.methods if k in m['tok']]
+    hit = [m for m in c.methods if k in m['tok']]
+    if hit and _GUITAR.search(q or '') and C.classify(q) == '악기·취미':   # 악기 '기타'는 '기타 전기·전자제품' 같은 묶음 무상 줄이 아니다
+        hit = [m for m in hit if not C.CATCH_ALL.search(m['name'])]
+    return hit
 
 
 def _multi_confirmed(c, q, r):
@@ -594,6 +597,7 @@ def _post(c, q, label, expr, res):
 
 
 def _post1(c, q, label, expr, res):
+    res = _drop_catchall(c, expr or q, label or _label_for(c, q), res)
     if res.get('rows'):
         n0 = len(res['rows'])
         res['rows'] = _kind_fit(expr or q, _size_fit(expr or q, res['rows']))
@@ -701,6 +705,41 @@ def _ref_scaled(c, q, label):
     return out
 
 
+_EFREE = re.compile(r'기타.*(전기|전자)')
+_NOT_EFREE = re.compile(r'매트|장판|담요|보일러')      # 조례마다 유료 줄로 따로 두는 경우가 많아 무상 묶음으로 넘겨짚지 않는다
+_FURN_END = re.compile(r'(장|다이|받침대?|선반|테이블|책상|거치대|커버)$')    # TV장·TV다이는 가구
+
+
+def _elec_free(c, q):
+    """조례 무상 줄에 '기타 폐전기·폐전자제품'·'기타 전기·전자제품' 같은 묶음이 있고 고객 품목이 가전이면 그 무상 줄."""
+    hit = [m for m in c.methods if _EFREE.search(m['name']) and '소형' not in m['name']]   # '기타(소형 가전제품)'은 작은 것만
+    if not hit or C.classify(q) != '가전·전자' or _FURN_END.search(re.sub(r'\s', '', q)) or _NOT_EFREE.search(q):
+        return None
+    return hit[0]
+
+
+_GUITAR = re.compile(r'기타')
+
+
+def _drop_catchall(c, q, lab, res):
+    """'기타'(악기)를 조례의 '기타'(그 밖의 물건) 묶음 줄로 답하지 않는다."""
+    if not res.get('rows') or not _GUITAR.search(q or '') or C.classify(q) != '악기·취미':
+        return res
+    keep = [o for o in res['rows'] if o.get('method') or not C.CATCH_ALL.search(str(o.get('src') or ''))]
+    if len(keep) == len(res['rows']):
+        return res
+    if keep:
+        return dict(res, rows=keep)
+    if E.norm(q) != E.norm('통기타'):
+        alt = resolve(c, '통기타', lab)                 # 악기 '기타'로 다시(조례에 없으면 과천 기준·전국 통계 계산)
+        if alt.get('rows') and not any(C.CATCH_ALL.search(str(o.get('src') or '')) for o in alt['rows']):
+            return dict(alt, result=dict(alt['result'], 품목=q))
+    ref = _ref_scaled(c, q, lab)
+    if ref and not _unclear(ref):
+        return {'kind': 'rows', 'rows': ref, 'result': dict(res['result'], 경로=f'과천 기준 지역 환산(k {c.k:.2f})'), 'review': True}
+    return {'kind': 'pending', 'rows': [], 'result': dict(res['result'], 경로='조례 기타 묶음 줄 제외'), 'review': True}
+
+
 def _resolve(c, q, label=None, expr=None):
     q = clean_name(q)
     label = label or _label_for(c, q)
@@ -719,6 +758,11 @@ def _resolve(c, q, label=None, expr=None):
     r = engine_price(c, q)
     if r.get('확인'):
         return {'kind': 'ask', 'rows': [], 'result': r}
+    if not r['등급'].startswith(('L0', 'L1')):
+        ef = _elec_free(c, q)
+        if ef:                                          # 조례가 '기타 전기·전자제품'까지 무상으로 정한 곳(진도·남원 등)
+            return {'kind': 'rows', 'rows': [{'item': label, 'spec': '모든규격', 'fee': None, 'method': ef['method'], 'note': ''}],
+                    'result': {'등급': '배출 방법', '품목': q, '경로': f"조례 무상 품목 ‘{ef['name']}’"}}
     multi = _multi_confirmed(c, q, r)
     if multi:
         return {'kind': 'ask', 'rows': [], 'result': r, 'names': multi}
