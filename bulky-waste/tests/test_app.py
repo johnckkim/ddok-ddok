@@ -838,3 +838,19 @@ def test_sized_bed_adds_matching_frame():
     q = [{'item': '퀸침대', 'spec': '1400mm 미만', 'fee': 5000, 'src': '침대(침대틀)'},
          {'item': '퀸침대', 'spec': '1400mm 이상', 'fee': 8000, 'src': '침대(침대틀)'}]
     assert [o['fee'] for o in S._bed_frame(c, '퀸침대', q)] == [8000]
+
+
+def test_sized_bed_with_separate_frame_and_mattress_items():
+    """조례에 '침대틀'·'매트리스'가 따로 품목이어도 '싱글침대'는 1,400mm 미만 틀 + 싱글 매트리스, '퀸침대'는 이상 틀 + 퀸 매트리스."""
+    from server import service as S
+
+    class R:
+        pass
+    c = R()
+    mk = lambda n, s, f: {'name': n, 'spec': s, 'fee': f, 'tok': S._tok(n), 'disp_item': '', 'disp_spec': ''}
+    c.local = [mk('침대틀', '1,400mm미만', 5000), mk('침대틀', '1,400mm이상', 8000), mk('매트리스', '1,000mm이상~1,400mm미만(싱글, 슈퍼싱글)', 5000),
+               mk('매트리스', '1,400mm이상~1,700mm미만(더블, 퀸)', 8000), mk('돌침대', '모든규격', 20000)]
+    r = S._sized_bed(c, '싱글침대', '싱글침대')
+    assert [o['fee'] for o in r['rows']] == [5000, 5000] and [o['src'] for o in r['rows']] == ['침대틀', '매트리스']
+    assert [o['fee'] for o in S._sized_bed(c, '퀸침대', '퀸침대')['rows']] == [8000, 8000]
+    assert S._sized_bed(c, '2층침대', '2층침대') is None and S._sized_bed(c, '침대', '침대') is None

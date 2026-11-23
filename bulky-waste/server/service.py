@@ -614,8 +614,48 @@ def _spec_hit(c, q, label):
             'result': {'등급': 'L0 조례(규격 칸 일치)', '품목': q, '경로': f'조례 {next(iter(names))} 규격 일치'}}
 
 
+def _sized_bed(c, q, label):
+    """'싱글침대'·'퀸침대'·'킹침대': 조례의 침대틀·매트리스 줄 중 그 크기에 맞는 줄(품목이 '침대'든 '침대틀'·'매트리스'로 따로든)."""
+    qq = re.sub(r'\s', '', q or '')
+    s1, s2 = bool(_SIZE1.search(qq)), bool(_SIZE2.search(qq))
+    if not qq.endswith('침대') or s1 == s2 or re.search(r'2층|이층|벙커|돌|흙|옥|유아|아기|어린이|라꾸|간이|접이|전동|물침대|범퍼', qq):
+        return None
+    want = '킹' if '킹' in qq else ('퀸|더블' if re.search('퀸|더블', qq) else ('싱글' if '싱글' in qq else None))
+    frames, mats, sets = [], [], []
+    for r in c.local:
+        nm, sp = r['name'], str(r['spec'] or '')
+        txt = re.sub(r'\s', '', nm + sp)
+        if re.search(r'2층|이층|벙커|돌|흙|유아|아기|헤드|머리|판\(', txt):
+            continue
+        if re.search(r'세트|전체|포함', sp) and '침대' in nm and re.search(r'1\s*인' if s1 else r'2\s*인', sp):
+            sets.append(r)                                # '1인용(전체)'·'1인용 세트' 같은 틀+매트리스 묶음 줄
+            continue
+        m = _FRAME_MM.search(sp.replace(' ', ''))
+        if '틀' in txt and '침대' in txt and m:
+            if (m.group(1) == '미만' or m.group(2) == '1') if s1 else (m.group(1) == '이상' or m.group(2) == '2'):
+                frames.append(r)
+        elif '매트리스' in txt and '토퍼' not in txt and ('침대' in txt or nm.startswith('매트리스')):
+            if (want and re.search(want, sp)) or re.search(r'1\s*인' if s1 else r'2\s*인', sp):
+                mats.append(r)
+    if not frames or not mats or len(frames) > 2 or len(mats) > 2:
+        return None
+    rows = []
+    for r in frames + mats + (sets if len(sets) == 1 else []):
+        sp = C.tidy_spec(r['disp_spec'] or r['spec'])
+        if r in frames and '틀' not in sp:
+            sp = '침대틀 ' + sp
+        if r in mats and '매트리스' not in sp:
+            sp = '매트리스 ' + sp
+        rows.append({'item': label, 'spec': sp, 'fee': r['fee'], 'note': '', 'src': r['name']})
+    return {'kind': 'rows', 'rows': rows, 'result': {'등급': 'L0 조례(크기 맞춤 규격 일치)', '품목': q, '경로': '조례 침대틀·매트리스 크기 맞춤'}}
+
+
 def resolve(c, q, label=None, expr=None):
     """품목명 1개 → {'kind': 'rows'|'pending'|'ask', rows, result(내부), names(ask일 때 후보)}"""
+    sb = _sized_bed(c, expr or q, label or _label_for(c, q))
+    if sb:
+        _mark_cart(sb, label or _label_for(c, q))
+        return sb
     res = _resolve(c, q, label, expr)
     g0 = str(res.get('result', {}).get('등급') or '')
     if res['kind'] == 'pending' or g0.startswith(('L3', 'L4')) or '과천 기준' in str(res.get('result', {}).get('경로') or ''):
